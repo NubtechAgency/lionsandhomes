@@ -111,8 +111,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
  */
 export const getTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const transactionId = parseInt(id);
+    const transactionId = parseInt(req.params.id as string);
 
     // ✅ Validar ID numérico
     if (isNaN(transactionId)) {
@@ -160,8 +159,7 @@ export const getTransaction = async (req: Request, res: Response): Promise<void>
  */
 export const updateTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const transactionId = parseInt(id);
+    const transactionId = parseInt(req.params.id as string);
 
     // ✅ Validar ID numérico
     if (isNaN(transactionId)) {
@@ -267,8 +265,7 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
  */
 export const archiveTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const transactionId = parseInt(id);
+    const transactionId = parseInt(req.params.id as string);
 
     if (isNaN(transactionId)) {
       res.status(400).json({

@@ -133,7 +133,7 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
  * GET /api/sync/status
  * Endpoint para verificar que el servicio de sincronización está funcionando
  */
-export const getSyncStatus = async (req: Request, res: Response): Promise<void> => {
+export const getSyncStatus = async (_req: Request, res: Response): Promise<void> => {
   try {
     // Obtener estadísticas rápidas de la BD
     const totalTransactions = await prisma.transaction.count();

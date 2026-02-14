@@ -64,8 +64,7 @@ export const listProjects = async (req: Request, res: Response): Promise<void> =
  */
 export const getProject = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const projectId = parseInt(id);
+    const projectId = parseInt(req.params.id as string);
 
     if (isNaN(projectId)) {
       res.status(400).json({
@@ -208,8 +207,7 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
  */
 export const updateProject = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const projectId = parseInt(id);
+    const projectId = parseInt(req.params.id as string);
 
     if (isNaN(projectId)) {
       res.status(400).json({
@@ -294,8 +292,7 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
  */
 export const deleteProject = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const projectId = parseInt(id);
+    const projectId = parseInt(req.params.id as string);
 
     if (isNaN(projectId)) {
       res.status(400).json({

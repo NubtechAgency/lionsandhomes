@@ -40,7 +40,7 @@ app.use(express.urlencoded({ extended: true }));
 // ========================================
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'OK',
     message: 'Lions API is running',
@@ -49,7 +49,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // Root endpoint
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.json({
     name: 'Lions Expense Control API',
     version: '1.0.0',
@@ -78,7 +78,7 @@ app.use((req: Request, res: Response) => {
 });
 
 // Middleware de manejo global de errores
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Error:', err);
 
   res.status(500).json({
