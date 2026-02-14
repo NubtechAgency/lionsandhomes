@@ -44,6 +44,7 @@ export default function Transactions() {
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ totalAmount: 0, withoutInvoice: 0, unassigned: 0 });
   const LIMIT = 50;
 
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -75,6 +76,7 @@ export default function Transactions() {
       setTransactions(response.transactions);
       setHasMore(response.pagination.hasMore);
       setTotal(response.pagination.total);
+      setStats(response.stats);
     } catch (err) {
       setError('Error al cargar las transacciones');
       console.error(err);
@@ -138,9 +140,7 @@ export default function Transactions() {
   const handleInlineInvoiceUpload = async (transactionId: number, file: File) => {
     try {
       setUploadingInvoiceId(transactionId);
-      const { uploadUrl, key } = await invoiceAPI.getUploadUrl(transactionId, file.name);
-      await invoiceAPI.uploadFile(uploadUrl, file);
-      await invoiceAPI.attachInvoice(transactionId, key, file.name);
+      await invoiceAPI.uploadInvoice(transactionId, file);
       await loadTransactions();
     } catch (err) {
       alert('Error al subir la factura');
@@ -178,9 +178,7 @@ export default function Transactions() {
 
   const hasActiveFilters = Object.values(filters).some(v => v !== undefined);
 
-  const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const withoutInvoice = transactions.filter(t => !t.hasInvoice && t.amount < 0).length;
-  const unassigned = transactions.filter(t => !t.projectId).length;
+  const { totalAmount, withoutInvoice, unassigned } = stats;
 
   return (
     <div className="min-h-screen bg-amber-50/30">
@@ -202,7 +200,7 @@ export default function Transactions() {
             color="amber"
           />
           <KPICard
-            title="Importe Página"
+            title="Importe Total"
             value={`€${formatCurrency(Math.abs(totalAmount))}`}
             subtitle={totalAmount < 0 ? 'Gasto neto' : 'Ingreso neto'}
             color={totalAmount < 0 ? 'red' : 'green'}
@@ -210,7 +208,7 @@ export default function Transactions() {
           <KPICard
             title="Sin Factura"
             value={withoutInvoice}
-            subtitle="En esta página"
+            subtitle="Gastos sin factura"
             icon={FileText}
             color={withoutInvoice > 0 ? 'red' : 'green'}
           />

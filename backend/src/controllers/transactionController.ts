@@ -99,8 +99,21 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       skip: parseInt(offset as string)
     });
 
-    // Contar total para paginación
-    const total = await prisma.transaction.count({ where });
+    // Contar total para paginación + stats agregados
+    const withoutInvoiceWhere: any = { ...where, hasInvoice: false };
+    // Combinar filtro amount existente con lt: 0 para gastos sin factura
+    if (where.amount) {
+      withoutInvoiceWhere.amount = { ...where.amount, lt: 0 };
+    } else {
+      withoutInvoiceWhere.amount = { lt: 0 };
+    }
+
+    const [total, totalAmountAgg, withoutInvoiceCount, unassignedCount] = await Promise.all([
+      prisma.transaction.count({ where }),
+      prisma.transaction.aggregate({ where, _sum: { amount: true } }),
+      prisma.transaction.count({ where: withoutInvoiceWhere }),
+      prisma.transaction.count({ where: { ...where, projectId: null } }),
+    ]);
 
     res.json({
       transactions,
@@ -109,6 +122,11 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
         hasMore: parseInt(offset as string) + transactions.length < total
+      },
+      stats: {
+        totalAmount: totalAmountAgg._sum.amount || 0,
+        withoutInvoice: withoutInvoiceCount,
+        unassigned: unassignedCount,
       }
     });
   } catch (error) {
@@ -265,9 +283,29 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       }
     });
 
+    // 🔄 Auto-sync: actualizar todas las transacciones con el mismo concepto (solo isFixed y projectId)
+    const syncData: any = {};
+    if (isFixed !== undefined) syncData.isFixed = isFixed;
+    if (projectId !== undefined) syncData.projectId = projectId === null ? null : projectId;
+
+    let syncedCount = 0;
+    if (Object.keys(syncData).length > 0 && existingTransaction.concept) {
+      const result = await prisma.transaction.updateMany({
+        where: {
+          concept: existingTransaction.concept,
+          id: { not: transactionId },
+        },
+        data: syncData,
+      });
+      syncedCount = result.count;
+    }
+
     res.json({
-      message: 'Transacción actualizada exitosamente',
-      transaction
+      message: syncedCount > 0
+        ? `Transacción actualizada y ${syncedCount} más con el mismo concepto`
+        : 'Transacción actualizada exitosamente',
+      transaction,
+      syncedCount,
     });
   } catch (error) {
     console.error('Error en updateTransaction:', error);

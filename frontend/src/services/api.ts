@@ -148,6 +148,11 @@ export const transactionAPI = {
   ): Promise<{
     transactions: Transaction[];
     pagination: TransactionPagination;
+    stats: {
+      totalAmount: number;
+      withoutInvoice: number;
+      unassigned: number;
+    };
   }> => {
     const params = new URLSearchParams();
 
@@ -170,6 +175,11 @@ export const transactionAPI = {
     return fetchAPI<{
       transactions: Transaction[];
       pagination: TransactionPagination;
+      stats: {
+        totalAmount: number;
+        withoutInvoice: number;
+        unassigned: number;
+      };
     }>(`/api/transactions${queryString ? `?${queryString}` : ''}`);
   },
 
