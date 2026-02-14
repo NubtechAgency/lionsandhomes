@@ -28,6 +28,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# OpenSSL requerido por Prisma schema engine
+RUN apk add --no-cache openssl
+
 # Copiar archivos de dependencias
 COPY package*.json ./
 
