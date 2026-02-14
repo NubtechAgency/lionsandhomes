@@ -93,9 +93,20 @@ export default function ProjectDetail() {
 
   // Build spendingByCategory for progress list
   const spendingByCategory: Record<string, number> = {};
+  const fixedByCategory: Record<string, number> = {};
+  let fixedTotal = 0;
+  let variableTotal = 0;
   transactions.forEach(t => {
-    if (t.expenseCategory && t.amount < 0) {
-      spendingByCategory[t.expenseCategory] = (spendingByCategory[t.expenseCategory] || 0) + Math.abs(t.amount);
+    if (t.amount < 0) {
+      const amt = Math.abs(t.amount);
+      if (t.isFixed) fixedTotal += amt;
+      else variableTotal += amt;
+      if (t.expenseCategory) {
+        spendingByCategory[t.expenseCategory] = (spendingByCategory[t.expenseCategory] || 0) + amt;
+        if (t.isFixed) {
+          fixedByCategory[t.expenseCategory] = (fixedByCategory[t.expenseCategory] || 0) + amt;
+        }
+      }
     }
   });
 
@@ -246,7 +257,7 @@ export default function ProjectDetail() {
           {/* Bar chart */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Presupuesto vs Gasto</h3>
-            <BudgetVsSpendingChart categoryStats={categoryStats} />
+            <BudgetVsSpendingChart categoryStats={categoryStats} fixedByCategory={fixedByCategory} />
           </div>
         </div>
 
@@ -271,7 +282,33 @@ export default function ProjectDetail() {
 
         {/* Tab Content */}
         {activeTab === 'general' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            {/* Fixed vs Variable breakdown */}
+            <div className="bg-white rounded-xl border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Gastos Fijos vs Variables</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-1">Total</p>
+                  <p className="text-lg font-bold text-gray-900">&euro;{formatCurrency(stats.totalSpent)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-1">Variables</p>
+                  <p className="text-lg font-bold text-orange-600">&euro;{formatCurrency(variableTotal)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-1">Fijos</p>
+                  <p className="text-lg font-bold text-blue-600">&euro;{formatCurrency(fixedTotal)}</p>
+                </div>
+              </div>
+              {stats.totalSpent > 0 && (
+                <div className="mt-3 flex h-3 rounded-full overflow-hidden bg-gray-100">
+                  <div className="bg-orange-500 transition-all" style={{ width: `${(variableTotal / stats.totalSpent) * 100}%` }} />
+                  <div className="bg-blue-500 transition-all" style={{ width: `${(fixedTotal / stats.totalSpent) * 100}%` }} />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Categorías</h3>
               <CategoryProgressList
@@ -304,6 +341,7 @@ export default function ProjectDetail() {
                   ))}
                 </div>
               )}
+            </div>
             </div>
           </div>
         )}

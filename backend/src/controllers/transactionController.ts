@@ -19,7 +19,10 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       dateTo,
       isManual,
       isArchived,
+      isFixed,
       search,
+      amountMin,
+      amountMax,
       limit = '50',
       offset = '0'
     } = req.query;
@@ -54,6 +57,17 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       where.isManual = isManual === 'true';
     }
 
+    if (isFixed !== undefined) {
+      where.isFixed = isFixed === 'true';
+    }
+
+    // Filtro de rango de importe (valor absoluto - se invierte el signo porque gastos son negativos)
+    if (amountMin || amountMax) {
+      where.amount = { ...where.amount };
+      if (amountMin) where.amount.lte = -parseFloat(amountMin as string);
+      if (amountMax) where.amount.gte = -parseFloat(amountMax as string);
+    }
+
     // Filtro de rango de fechas
     if (dateFrom || dateTo) {
       where.date = {};
@@ -61,10 +75,11 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       if (dateTo) where.date.lte = new Date(dateTo as string);
     }
 
-    // Búsqueda en concepto (SQLite LIKE es case-insensitive por defecto)
+    // Búsqueda en concepto (case-insensitive en PostgreSQL)
     if (search && typeof search === 'string') {
       where.concept = {
         contains: search,
+        mode: 'insensitive',
       };
     }
 
@@ -170,7 +185,7 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { projectId, expenseCategory, notes } = req.body;
+    const { projectId, expenseCategory, notes, isFixed } = req.body;
 
     // 🔍 Verificar que la transacción existe
     const existingTransaction = await prisma.transaction.findUnique({
@@ -229,6 +244,11 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
     // Actualizar notes
     if (notes !== undefined) {
       updateData.notes = notes || null;
+    }
+
+    // Actualizar isFixed
+    if (isFixed !== undefined) {
+      updateData.isFixed = isFixed;
     }
 
     // 💾 Actualizar la transacción en la BD

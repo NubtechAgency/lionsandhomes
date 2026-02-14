@@ -111,14 +111,13 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
 
     // Calcular gasto real por categoría
     const categoryExpenses: Record<string, number> = {};
-    let totalSpent = 0;
 
     for (const category of EXPENSE_CATEGORIES) {
       const expenses = await prisma.transaction.aggregate({
         where: {
           expenseCategory: category,
           amount: {
-            lt: 0, // Solo gastos
+            lt: 0,
           },
           isArchived: false,
           ...(projectId && { projectId }),
@@ -130,8 +129,18 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
 
       const spent = Math.abs(expenses._sum.amount || 0);
       categoryExpenses[category] = spent;
-      totalSpent += spent;
     }
+
+    // Calcular totalSpent REAL (todas las transacciones, no solo las que tienen categoría)
+    const allExpensesAggregate = await prisma.transaction.aggregate({
+      where: {
+        amount: { lt: 0 },
+        isArchived: false,
+        ...(projectId && { projectId }),
+      },
+      _sum: { amount: true },
+    });
+    const totalSpent = Math.abs(allExpensesAggregate._sum.amount || 0);
 
     // Construir array de categorías con presupuesto vs gasto
     const categoryStats = EXPENSE_CATEGORIES.map((category) => {

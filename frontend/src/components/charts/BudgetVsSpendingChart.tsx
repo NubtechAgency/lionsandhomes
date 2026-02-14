@@ -5,22 +5,27 @@ import { formatCurrency } from '../../lib/formatters';
 
 interface Props {
   categoryStats: CategoryStat[];
+  fixedByCategory?: Record<string, number>;
 }
 
 const COLORS = {
   budget: '#93c5fd',
-  spent: '#f59e0b',
+  variable: '#f59e0b',
+  fixed: '#3b82f6',
 };
 
-export default function BudgetVsSpendingChart({ categoryStats }: Props) {
+export default function BudgetVsSpendingChart({ categoryStats, fixedByCategory }: Props) {
   const data = categoryStats
     .filter(s => s.budget > 0 || s.spent > 0)
     .map(s => {
       const cat = EXPENSE_CATEGORIES.find(c => c.key === s.category);
+      const fixed = fixedByCategory?.[s.category] || 0;
+      const variable = Math.max(0, s.spent - fixed);
       return {
         name: cat?.label || s.category,
         Presupuesto: s.budget,
-        Gastado: s.spent,
+        Variable: Math.round(variable * 100) / 100,
+        Fijo: Math.round(fixed * 100) / 100,
       };
     });
 
@@ -41,8 +46,12 @@ export default function BudgetVsSpendingChart({ categoryStats }: Props) {
           <span className="text-sm font-medium text-gray-600">Presupuesto</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.spent }} />
-          <span className="text-sm font-medium text-gray-600">Gastado</span>
+          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.variable }} />
+          <span className="text-sm font-medium text-gray-600">Variable</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: COLORS.fixed }} />
+          <span className="text-sm font-medium text-gray-600">Fijo</span>
         </div>
       </div>
 
@@ -65,7 +74,7 @@ export default function BudgetVsSpendingChart({ categoryStats }: Props) {
             width={160}
           />
           <Tooltip
-            formatter={(value: number, name: string) => [`€${formatCurrency(value)}`, name]}
+            formatter={(value: number, name: string) => [`\u20AC${formatCurrency(value)}`, name]}
             contentStyle={{
               borderRadius: '8px',
               border: '1px solid #e5e7eb',
@@ -73,8 +82,9 @@ export default function BudgetVsSpendingChart({ categoryStats }: Props) {
               fontSize: '13px',
             }}
           />
-          <Bar dataKey="Presupuesto" fill={COLORS.budget} radius={[0, 4, 4, 0]} maxBarSize={20} />
-          <Bar dataKey="Gastado" fill={COLORS.spent} radius={[0, 4, 4, 0]} maxBarSize={20} />
+          <Bar dataKey="Presupuesto" fill={COLORS.budget} radius={[0, 4, 4, 0]} maxBarSize={16} />
+          <Bar dataKey="Variable" fill={COLORS.variable} radius={[0, 4, 4, 0]} maxBarSize={16} stackId="spent" />
+          <Bar dataKey="Fijo" fill={COLORS.fixed} radius={[0, 4, 4, 0]} maxBarSize={16} stackId="spent" />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -10,7 +10,7 @@ export const EXPENSE_CATEGORIES = [
   'DECORACION',
   'COMPRA_Y_GASTOS',
   'OTROS',
-  'GENERAL',
+  'BUROCRACIA',
 ] as const;
 
 /**
@@ -135,20 +135,20 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
   try {
     const { name, description, status, totalBudget, categoryBudgets, startDate, endDate } = req.body;
 
-    // Validar campos requeridos
-    if (!name || !totalBudget || !categoryBudgets || !startDate) {
+    // Validar campos requeridos (presupuesto es opcional, default 0)
+    if (!name || !startDate) {
       res.status(400).json({
         error: 'Datos incompletos',
-        message: 'Nombre, presupuesto total, desglose de categorías y fecha de inicio son requeridos'
+        message: 'Nombre y fecha de inicio son requeridos'
       });
       return;
     }
 
-    // Validar que totalBudget sea un número positivo
-    if (typeof totalBudget !== 'number' || totalBudget <= 0) {
+    // Validar que totalBudget sea un número no negativo (0 permitido)
+    if (totalBudget !== undefined && (typeof totalBudget !== 'number' || totalBudget < 0)) {
       res.status(400).json({
         error: 'Presupuesto inválido',
-        message: 'El presupuesto total debe ser un número positivo'
+        message: 'El presupuesto total debe ser un número no negativo'
       });
       return;
     }
@@ -249,10 +249,10 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
       updateData.status = status;
     }
     if (totalBudget !== undefined) {
-      if (typeof totalBudget !== 'number' || totalBudget <= 0) {
+      if (typeof totalBudget !== 'number' || totalBudget < 0) {
         res.status(400).json({
           error: 'Presupuesto inválido',
-          message: 'El presupuesto total debe ser un número positivo'
+          message: 'El presupuesto total debe ser un número no negativo'
         });
         return;
       }

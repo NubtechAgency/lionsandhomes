@@ -159,7 +159,10 @@ export const transactionAPI = {
     if (filters?.dateTo) params.append('dateTo', filters.dateTo);
     if (filters?.isManual !== undefined) params.append('isManual', filters.isManual.toString());
     if (filters?.isArchived) params.append('isArchived', filters.isArchived);
+    if (filters?.isFixed !== undefined) params.append('isFixed', filters.isFixed.toString());
     if (filters?.search) params.append('search', filters.search);
+    if (filters?.amountMin) params.append('amountMin', filters.amountMin.toString());
+    if (filters?.amountMax) params.append('amountMax', filters.amountMax.toString());
     params.append('limit', limit.toString());
     params.append('offset', offset.toString());
 

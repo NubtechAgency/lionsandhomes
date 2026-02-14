@@ -18,6 +18,7 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     projectId: transaction.projectId,
     expenseCategory: transaction.expenseCategory,
     notes: transaction.notes || '',
+    isFixed: transaction.isFixed,
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -36,6 +37,7 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       projectId: transaction.projectId,
       expenseCategory: transaction.expenseCategory,
       notes: transaction.notes || '',
+      isFixed: transaction.isFixed,
     });
     setHasInvoice(transaction.hasInvoice);
     setInvoiceFileName(transaction.invoiceFileName);
@@ -234,6 +236,37 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Tipo de Gasto */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Gasto
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isFixed: false })}
+                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      !formData.isFixed
+                        ? 'bg-orange-100 text-orange-700 border-2 border-orange-400'
+                        : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                    }`}
+                  >
+                    Variable
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isFixed: true })}
+                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      formData.isFixed
+                        ? 'bg-blue-100 text-blue-700 border-2 border-blue-400'
+                        : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                    }`}
+                  >
+                    Fijo
+                  </button>
+                </div>
               </div>
 
               {/* Notas */}

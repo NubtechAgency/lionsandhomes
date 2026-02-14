@@ -1,7 +1,7 @@
 import type { ExpenseCategory } from '../types';
 
 // Categorías de gasto de Lions - FUENTE ÚNICA
-// 4 categorías para proyectos + 1 global (GENERAL)
+// 4 categorías para proyectos + 1 global (BUROCRACIA)
 export const EXPENSE_CATEGORIES: {
   key: ExpenseCategory;
   label: string;
@@ -28,11 +28,11 @@ export const EXPENSE_CATEGORIES: {
     description: '',
   },
   {
-    key: 'GENERAL',
-    label: 'General',
+    key: 'BUROCRACIA',
+    label: 'Burocracia',
     description: 'Abogados, impuestos...',
   },
 ];
 
-// Solo las categorías de proyecto (sin GENERAL)
-export const PROJECT_CATEGORIES = EXPENSE_CATEGORIES.filter(c => c.key !== 'GENERAL');
+// Solo las categorías de proyecto (sin BUROCRACIA)
+export const PROJECT_CATEGORIES = EXPENSE_CATEGORIES.filter(c => c.key !== 'BUROCRACIA');

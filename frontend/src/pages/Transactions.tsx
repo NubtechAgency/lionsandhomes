@@ -38,6 +38,8 @@ export default function Transactions() {
 
   const [filters, setFilters] = useState<TransactionFilters>(initialFilters);
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
+  const [amountMinInput, setAmountMinInput] = useState('');
+  const [amountMaxInput, setAmountMaxInput] = useState('');
 
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -148,16 +150,36 @@ export default function Transactions() {
     }
   };
 
+  const handleInlineFixedToggle = async (transactionId: number, currentValue: boolean) => {
+    try {
+      await transactionAPI.updateTransaction(transactionId, { isFixed: !currentValue });
+      await loadTransactions();
+    } catch (err) {
+      console.error('Error al cambiar tipo de gasto:', err);
+    }
+  };
+
+  const handleAmountFilterApply = () => {
+    setFilters(prev => ({
+      ...prev,
+      amountMin: amountMinInput ? parseFloat(amountMinInput) : undefined,
+      amountMax: amountMaxInput ? parseFloat(amountMaxInput) : undefined,
+    }));
+    setCurrentPage(0);
+  };
+
   const clearFilters = () => {
     setFilters({});
     setSearchInput('');
+    setAmountMinInput('');
+    setAmountMaxInput('');
     setCurrentPage(0);
   };
 
   const hasActiveFilters = Object.values(filters).some(v => v !== undefined);
 
   const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const withoutInvoice = transactions.filter(t => !t.hasInvoice).length;
+  const withoutInvoice = transactions.filter(t => !t.hasInvoice && t.amount < 0).length;
   const unassigned = transactions.filter(t => !t.projectId).length;
 
   return (
@@ -264,7 +286,7 @@ export default function Transactions() {
             </form>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <input
               type="date"
               value={filters.dateFrom || ''}
@@ -279,7 +301,37 @@ export default function Transactions() {
               className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
               placeholder="Hasta"
             />
-            <div />
+            <select
+              value={filters.isFixed === undefined ? '' : filters.isFixed.toString()}
+              onChange={e => handleFilterChange('isFixed', e.target.value === '' ? undefined : e.target.value === 'true')}
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="">Fijos y Variables</option>
+              <option value="true">Solo Fijos</option>
+              <option value="false">Solo Variables</option>
+            </select>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amountMinInput}
+                onChange={e => setAmountMinInput(e.target.value)}
+                onBlur={handleAmountFilterApply}
+                onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
+                placeholder="Min €"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amountMaxInput}
+                onChange={e => setAmountMaxInput(e.target.value)}
+                onBlur={handleAmountFilterApply}
+                onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
+                placeholder="Max €"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
@@ -321,6 +373,7 @@ export default function Transactions() {
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600">Proyecto</th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600">Categoría</th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Factura</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Tipo</th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -382,6 +435,18 @@ export default function Transactions() {
                             />
                           </label>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleInlineFixedToggle(t.id, t.isFixed)}
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                            t.isFixed
+                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {t.isFixed ? 'Fijo' : 'Variable'}
+                        </button>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">

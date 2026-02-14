@@ -62,6 +62,9 @@ model Transaction {
   // Archivado (las transacciones NUNCA se borran, solo se archivan)
   isArchived       Boolean           @default(false)
 
+  // Tipo de gasto: fijo o variable (por defecto variable)
+  isFixed          Boolean           @default(false)
+
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -73,7 +76,8 @@ model Transaction {
   @@index([date])
   @@index([isManual])
   @@index([isArchived])
+  @@index([isFixed])
 }
 
-// Categorias de gasto de Lions (como strings en SQLite)
-// Valores posibles: MATERIAL_Y_MANO_DE_OBRA, DECORACION, COMPRA_Y_GASTOS, OTROS, GENERAL
+// Categorias de gasto de Lions
+// Valores posibles: MATERIAL_Y_MANO_DE_OBRA, DECORACION, COMPRA_Y_GASTOS, OTROS, BUROCRACIA

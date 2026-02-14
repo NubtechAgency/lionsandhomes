@@ -39,7 +39,7 @@ export type ExpenseCategory =
   | 'DECORACION'
   | 'COMPRA_Y_GASTOS'
   | 'OTROS'
-  | 'GENERAL';
+  | 'BUROCRACIA';
 
 // Estados de un proyecto
 export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
@@ -123,6 +123,7 @@ export interface Transaction {
   invoiceUrl: string | null;
   invoiceFileName: string | null;
   isArchived: boolean;
+  isFixed: boolean;
   createdAt: string;
   updatedAt: string;
   project?: {
@@ -139,13 +140,17 @@ export interface TransactionFilters {
   dateTo?: string;
   isManual?: boolean;
   isArchived?: string; // 'true' | 'false' | 'all'
+  isFixed?: boolean;
   search?: string;
+  amountMin?: number;
+  amountMax?: number;
 }
 
 export interface UpdateTransactionData {
   projectId?: number | null;
   expenseCategory?: ExpenseCategory | null;
   notes?: string | null;
+  isFixed?: boolean;
 }
 
 export interface TransactionPagination {
