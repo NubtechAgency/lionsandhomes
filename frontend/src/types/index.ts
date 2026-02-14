@@ -144,6 +144,7 @@ export interface TransactionFilters {
   search?: string;
   amountMin?: number;
   amountMax?: number;
+  amountType?: 'expense' | 'income';
 }
 
 export interface UpdateTransactionData {

@@ -23,6 +23,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       search,
       amountMin,
       amountMax,
+      amountType,
       limit = '50',
       offset = '0'
     } = req.query;
@@ -59,6 +60,13 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
 
     if (isFixed !== undefined) {
       where.isFixed = isFixed === 'true';
+    }
+
+    // Filtro por tipo de importe: solo gastos o solo ingresos
+    if (amountType === 'expense') {
+      where.amount = { ...where.amount, lt: 0 };
+    } else if (amountType === 'income') {
+      where.amount = { ...where.amount, gte: 0 };
     }
 
     // Filtro de rango de importe (valor absoluto - se invierte el signo porque gastos son negativos)

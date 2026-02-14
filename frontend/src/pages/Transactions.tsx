@@ -6,7 +6,8 @@ import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2 } from 'lucide-react';
+import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import clsx from 'clsx';
 import type {
   Transaction,
   TransactionFilters,
@@ -14,6 +15,8 @@ import type {
   Project,
   ExpenseCategory,
 } from '../types';
+
+type ViewTab = 'expenses' | 'income';
 
 export default function Transactions() {
   const [searchParams] = useSearchParams();
@@ -36,7 +39,8 @@ export default function Transactions() {
     return f;
   };
 
-  const [filters, setFilters] = useState<TransactionFilters>(initialFilters);
+  const [activeTab, setActiveTab] = useState<ViewTab>('expenses');
+  const [filters, setFilters] = useState<TransactionFilters>({ ...initialFilters(), amountType: 'expense' });
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
   const [amountMinInput, setAmountMinInput] = useState('');
   const [amountMaxInput, setAmountMaxInput] = useState('');
@@ -169,14 +173,23 @@ export default function Transactions() {
   };
 
   const clearFilters = () => {
-    setFilters({});
+    setFilters({ amountType: activeTab === 'expenses' ? 'expense' : 'income' });
     setSearchInput('');
     setAmountMinInput('');
     setAmountMaxInput('');
     setCurrentPage(0);
   };
 
-  const hasActiveFilters = Object.values(filters).some(v => v !== undefined);
+  const handleTabChange = (tab: ViewTab) => {
+    setActiveTab(tab);
+    setFilters({ amountType: tab === 'expenses' ? 'expense' : 'income' });
+    setSearchInput('');
+    setAmountMinInput('');
+    setAmountMaxInput('');
+    setCurrentPage(0);
+  };
+
+  const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'amountType' && v !== undefined);
 
   const { totalExpenses, withoutInvoice, unassigned } = stats;
 
@@ -190,35 +203,65 @@ export default function Transactions() {
           <p className="text-gray-500 text-sm mt-1">Gestiona y asigna las transacciones bancarias</p>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <KPICard
-            title="Total Resultados"
-            value={total}
-            subtitle={`Página ${currentPage + 1}`}
-            icon={ArrowDownUp}
-            color="amber"
-          />
-          <KPICard
-            title="Gastado Total"
-            value={`€${formatCurrency(totalExpenses)}`}
-            subtitle="Suma de gastos"
-            color={totalExpenses > 0 ? 'red' : 'green'}
-          />
-          <KPICard
-            title="Sin Factura"
-            value={withoutInvoice}
-            subtitle="Gastos sin factura"
-            icon={FileText}
-            color={withoutInvoice > 0 ? 'red' : 'green'}
-          />
-          <KPICard
-            title="Sin Proyecto"
-            value={unassigned}
-            subtitle="Gastos sin asignar"
-            color={unassigned > 0 ? 'amber' : 'green'}
-          />
+        {/* Tabs: Gastos / Ingresos */}
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
+          <button
+            onClick={() => handleTabChange('expenses')}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors',
+              activeTab === 'expenses'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            )}
+          >
+            <TrendingDown size={16} />
+            Gastos
+          </button>
+          <button
+            onClick={() => handleTabChange('income')}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors',
+              activeTab === 'income'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            )}
+          >
+            <TrendingUp size={16} />
+            Ingresos
+          </button>
         </div>
+
+        {/* KPIs - solo para gastos */}
+        {activeTab === 'expenses' && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <KPICard
+              title="Total Gastos"
+              value={total}
+              subtitle={`Página ${currentPage + 1}`}
+              icon={ArrowDownUp}
+              color="amber"
+            />
+            <KPICard
+              title="Gastado Total"
+              value={`€${formatCurrency(totalExpenses)}`}
+              subtitle="Suma de gastos"
+              color={totalExpenses > 0 ? 'red' : 'green'}
+            />
+            <KPICard
+              title="Sin Factura"
+              value={withoutInvoice}
+              subtitle="Gastos sin factura"
+              icon={FileText}
+              color={withoutInvoice > 0 ? 'red' : 'green'}
+            />
+            <KPICard
+              title="Sin Proyecto"
+              value={unassigned}
+              subtitle="Gastos sin asignar"
+              color={unassigned > 0 ? 'amber' : 'green'}
+            />
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white rounded-xl border border-gray-100 p-5 mb-6">
@@ -239,26 +282,30 @@ export default function Transactions() {
               ))}
             </select>
 
-            <select
-              value={filters.expenseCategory || ''}
-              onChange={e => handleFilterChange('expenseCategory', e.target.value as ExpenseCategory)}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-            >
-              <option value="">Todas las categorías</option>
-              {EXPENSE_CATEGORIES.map(cat => (
-                <option key={cat.key} value={cat.key}>{cat.label}</option>
-              ))}
-            </select>
+            {activeTab === 'expenses' && (
+              <select
+                value={filters.expenseCategory || ''}
+                onChange={e => handleFilterChange('expenseCategory', e.target.value as ExpenseCategory)}
+                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="">Todas las categorías</option>
+                {EXPENSE_CATEGORIES.map(cat => (
+                  <option key={cat.key} value={cat.key}>{cat.label}</option>
+                ))}
+              </select>
+            )}
 
-            <select
-              value={filters.hasInvoice === undefined ? '' : filters.hasInvoice.toString()}
-              onChange={e => handleFilterChange('hasInvoice', e.target.value === '' ? undefined : e.target.value === 'true')}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-            >
-              <option value="">Todas</option>
-              <option value="true">Con factura</option>
-              <option value="false">Sin factura</option>
-            </select>
+            {activeTab === 'expenses' && (
+              <select
+                value={filters.hasInvoice === undefined ? '' : filters.hasInvoice.toString()}
+                onChange={e => handleFilterChange('hasInvoice', e.target.value === '' ? undefined : e.target.value === 'true')}
+                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="">Todas</option>
+                <option value="true">Con factura</option>
+                <option value="false">Sin factura</option>
+              </select>
+            )}
 
             <select
               value={filters.isArchived || ''}
@@ -299,37 +346,41 @@ export default function Transactions() {
               className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
               placeholder="Hasta"
             />
-            <select
-              value={filters.isFixed === undefined ? '' : filters.isFixed.toString()}
-              onChange={e => handleFilterChange('isFixed', e.target.value === '' ? undefined : e.target.value === 'true')}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-            >
-              <option value="">Fijos y Variables</option>
-              <option value="true">Solo Fijos</option>
-              <option value="false">Solo Variables</option>
-            </select>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amountMinInput}
-                onChange={e => setAmountMinInput(e.target.value)}
-                onBlur={handleAmountFilterApply}
-                onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
-                placeholder="Min €"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-              />
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amountMaxInput}
-                onChange={e => setAmountMaxInput(e.target.value)}
-                onBlur={handleAmountFilterApply}
-                onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
-                placeholder="Max €"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-              />
-            </div>
+            {activeTab === 'expenses' && (
+              <select
+                value={filters.isFixed === undefined ? '' : filters.isFixed.toString()}
+                onChange={e => handleFilterChange('isFixed', e.target.value === '' ? undefined : e.target.value === 'true')}
+                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="">Fijos y Variables</option>
+                <option value="true">Solo Fijos</option>
+                <option value="false">Solo Variables</option>
+              </select>
+            )}
+            {activeTab === 'expenses' && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={amountMinInput}
+                  onChange={e => setAmountMinInput(e.target.value)}
+                  onBlur={handleAmountFilterApply}
+                  onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
+                  placeholder="Min €"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={amountMaxInput}
+                  onChange={e => setAmountMaxInput(e.target.value)}
+                  onBlur={handleAmountFilterApply}
+                  onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
+                  placeholder="Max €"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            )}
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
@@ -369,9 +420,13 @@ export default function Transactions() {
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600">Concepto</th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right">Importe</th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600">Proyecto</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-600">Categoría</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Factura</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Tipo</th>
+                    {activeTab === 'expenses' && (
+                      <>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-600">Categoría</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Factura</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Tipo</th>
+                      </>
+                    )}
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -400,52 +455,56 @@ export default function Transactions() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={t.expenseCategory || ''}
-                          onChange={e => handleInlineCategoryChange(t.id, e.target.value)}
-                          className="bg-transparent border-0 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white max-w-[180px]"
-                        >
-                          <option value="" className="text-gray-400">Sin categoría</option>
-                          {EXPENSE_CATEGORIES.map(cat => (
-                            <option key={cat.key} value={cat.key}>{cat.label}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {t.hasInvoice ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Sí</span>
-                        ) : uploadingInvoiceId === t.id ? (
-                          <Loader2 size={16} className="inline animate-spin text-amber-600" />
-                        ) : (
-                          <label className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 cursor-pointer hover:bg-red-200 transition-colors">
-                            No
-                            <Upload size={12} />
-                            <input
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png"
-                              className="hidden"
-                              onChange={e => {
-                                const file = e.target.files?.[0];
-                                if (file) handleInlineInvoiceUpload(t.id, file);
-                                e.target.value = '';
-                              }}
-                            />
-                          </label>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => handleInlineFixedToggle(t.id, t.isFixed)}
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                            t.isFixed
-                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                        >
-                          {t.isFixed ? 'Fijo' : 'Variable'}
-                        </button>
-                      </td>
+                      {activeTab === 'expenses' && (
+                        <>
+                          <td className="px-4 py-3">
+                            <select
+                              value={t.expenseCategory || ''}
+                              onChange={e => handleInlineCategoryChange(t.id, e.target.value)}
+                              className="bg-transparent border-0 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white max-w-[180px]"
+                            >
+                              <option value="" className="text-gray-400">Sin categoría</option>
+                              {EXPENSE_CATEGORIES.map(cat => (
+                                <option key={cat.key} value={cat.key}>{cat.label}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {t.hasInvoice ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Sí</span>
+                            ) : uploadingInvoiceId === t.id ? (
+                              <Loader2 size={16} className="inline animate-spin text-amber-600" />
+                            ) : (
+                              <label className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 cursor-pointer hover:bg-red-200 transition-colors">
+                                No
+                                <Upload size={12} />
+                                <input
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="hidden"
+                                  onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleInlineInvoiceUpload(t.id, file);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => handleInlineFixedToggle(t.id, t.isFixed)}
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                                t.isFixed
+                                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              }`}
+                            >
+                              {t.isFixed ? 'Fijo' : 'Variable'}
+                            </button>
+                          </td>
+                        </>
+                      )}
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
                           <button
