@@ -1,0 +1,79 @@
+// Archivo: /backend/prisma/schema.prisma
+// Sistema de Control de Gastos Lions - Base de Datos
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Usuario único del sistema
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String   // Hash bcrypt
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Proyectos de remodelación
+model Project {
+  id               Int      @id @default(autoincrement())
+  name             String   // "Apartamento Gran Vía 45"
+  description      String?
+  status           String   @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED
+  totalBudget      Float    // Presupuesto total
+  categoryBudgets  String   // JSON string: { "MATERIAL_Y_MANO_DE_OBRA": 5000, "DECORACION": 3000, ... }
+  startDate        DateTime
+  endDate          DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  transactions     Transaction[]
+
+  @@index([status])
+}
+
+// Transacciones bancarias (sincronizadas) + manuales (creadas en dashboard)
+model Transaction {
+  id               Int               @id @default(autoincrement())
+  externalId       String?           @unique // ID único de Fintable/Google Sheets (NULL si es manual)
+  isManual         Boolean           @default(false) // TRUE si se creó manualmente en el dashboard
+
+  date             DateTime
+  amount           Float             // Negativo para gastos
+  concept          String            // Descripción del banco o introducida manualmente
+  category         String            @default("Uncategorized") // De Fintable (solo transacciones sincronizadas)
+
+  // Asignación manual
+  projectId        Int?
+  expenseCategory  String?           // Categoría de Lions (enum como string)
+  notes            String?
+
+  // Control de factura
+  hasInvoice       Boolean           @default(false)
+  invoiceUrl       String?           // URL de Cloudflare R2
+  invoiceFileName  String?
+
+  // Archivado (las transacciones NUNCA se borran, solo se archivan)
+  isArchived       Boolean           @default(false)
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  project          Project?          @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([expenseCategory])
+  @@index([hasInvoice])
+  @@index([date])
+  @@index([isManual])
+  @@index([isArchived])
+}
+
+// Categorias de gasto de Lions (como strings en SQLite)
+// Valores posibles: MATERIAL_Y_MANO_DE_OBRA, DECORACION, COMPRA_Y_GASTOS, OTROS, GENERAL

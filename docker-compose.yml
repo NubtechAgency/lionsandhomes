@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Base de datos PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: lions-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-lions_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-lions_password}
+      POSTGRES_DB: ${DB_NAME:-lions_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-lions_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lions-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lions-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-lions_user}:${DB_PASSWORD:-lions_password}@postgres:5432/${DB_NAME:-lions_db}
+      PORT: 8000
+      NODE_ENV: ${NODE_ENV:-production}
+      JWT_SECRET: ${JWT_SECRET}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-lions-invoices-production}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      N8N_SYNC_TOKEN: ${N8N_SYNC_TOKEN}
+      FRONTEND_URL: ${FRONTEND_URL:-https://lions.nubtechagency.com}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - lions-network
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://api.lions.nubtechagency.com}
+    container_name: lions-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - lions-network
+
+# Volúmenes persistentes
+volumes:
+  postgres_data:
+    driver: local
+
+# Red interna
+networks:
+  lions-network:
+    driver: bridge
