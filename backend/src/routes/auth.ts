@@ -1,16 +1,9 @@
 // Rutas de autenticación
 import { Router } from 'express';
-import { register, login, getCurrentUser } from '../controllers/authController';
+import { login, getCurrentUser } from '../controllers/authController';
 import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
-
-/**
- * POST /api/auth/register
- * Crear un nuevo usuario
- * Body: { email, password, name }
- */
-router.post('/register', register);
 
 /**
  * POST /api/auth/login

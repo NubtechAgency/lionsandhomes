@@ -2,6 +2,8 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
+import { PrismaClient } from '@prisma/client';
 
 // Importar rutas
 import authRoutes from './routes/auth';
@@ -13,6 +15,8 @@ import invoiceRoutes from './routes/invoices';
 
 // Cargar variables de entorno
 dotenv.config();
+
+const prisma = new PrismaClient();
 
 const app: Application = express();
 const PORT = process.env.PORT || 8000;
@@ -93,10 +97,31 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // INICIAR SERVIDOR
 // ========================================
 
-app.listen(PORT, () => {
+// Seed: crear usuario por defecto si no existe
+async function seedDefaultUser() {
+  try {
+    const existing = await prisma.user.findFirst();
+    if (!existing) {
+      const hashedPassword = await bcrypt.hash('***REMOVED***', 10);
+      await prisma.user.create({
+        data: {
+          email: 'lions',
+          password: hashedPassword,
+          name: 'Lions Admin'
+        }
+      });
+      console.log('✅ Usuario por defecto creado: lions');
+    }
+  } catch (error) {
+    console.error('Error al crear usuario por defecto:', error);
+  }
+}
+
+app.listen(PORT, async () => {
   console.log(`🚀 Servidor Lions corriendo en http://localhost:${PORT}`);
   console.log(`📊 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+  await seedDefaultUser();
 });
 
 export default app;
