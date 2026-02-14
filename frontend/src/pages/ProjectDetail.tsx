@@ -133,7 +133,6 @@ export default function ProjectDetail() {
                 {statusLabel}
               </span>
             </div>
-            {project.description && <p className="text-gray-500 mt-1">{project.description}</p>}
           </div>
           <div className="flex gap-2">
             <button
@@ -177,11 +176,11 @@ export default function ProjectDetail() {
             tooltip="Gastos de este proyecto que aún no tienen factura adjunta"
           />
           <KPICard
-            title="Período"
-            value={formatDate(project.startDate)}
-            subtitle={project.endDate ? `hasta ${formatDate(project.endDate)}` : 'Sin fecha fin'}
-            color="gray"
-            tooltip="Fechas de inicio y fin del proyecto"
+            title="Transacciones"
+            value={transactions.length}
+            subtitle="En este proyecto"
+            color="amber"
+            tooltip="Número total de transacciones asignadas a este proyecto"
           />
         </div>
 

@@ -34,9 +34,6 @@ export default function ProjectCard({ project, spent = 0 }: Props) {
           <h3 className="font-semibold text-gray-900 group-hover:text-amber-700 transition-colors truncate">
             {project.name}
           </h3>
-          {project.description && (
-            <p className="text-xs text-gray-400 mt-0.5 truncate">{project.description}</p>
-          )}
         </div>
         <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${status.bg}`}>
           {status.label}

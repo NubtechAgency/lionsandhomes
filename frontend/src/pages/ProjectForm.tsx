@@ -95,10 +95,6 @@ export default function ProjectForm() {
       return 'El presupuesto total debe ser mayor a 0';
     }
 
-    if (!formData.startDate) {
-      return 'La fecha de inicio es obligatoria';
-    }
-
     const categoryTotal = calculateTotalFromCategories();
     if (categoryTotal > formData.totalBudget) {
       return `El desglose del presupuesto (€${categoryTotal.toFixed(2)}) excede el presupuesto total (€${formData.totalBudget.toFixed(2)})`;
@@ -205,20 +201,6 @@ export default function ProjectForm() {
               />
             </div>
 
-            {/* DESCRIPCIÓN */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Descripción
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => handleInputChange('description', e.target.value)}
-                placeholder="Describe brevemente el proyecto..."
-                rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-            </div>
-
             {/* ESTADO */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
@@ -233,35 +215,6 @@ export default function ProjectForm() {
               </select>
             </div>
 
-            {/* FECHAS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* FECHA INICIO */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fecha de Inicio *
-                </label>
-                <input
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => handleInputChange('startDate', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              {/* FECHA FIN */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fecha de Fin (opcional)
-                </label>
-                <input
-                  type="date"
-                  value={formData.endDate}
-                  onChange={(e) => handleInputChange('endDate', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-            </div>
           </div>
 
           {/* ===== PRESUPUESTO ===== */}

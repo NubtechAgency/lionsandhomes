@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { transactionAPI, projectAPI } from '../services/api';
+import { transactionAPI, projectAPI, invoiceAPI } from '../services/api';
 import TransactionEditModal from '../components/TransactionEditModal';
 import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { ArrowDownUp, Archive, FileText, Search, X } from 'lucide-react';
+import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2 } from 'lucide-react';
 import type {
   Transaction,
   TransactionFilters,
@@ -46,6 +46,7 @@ export default function Transactions() {
 
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null);
 
   useEffect(() => {
     loadProjects();
@@ -109,6 +110,41 @@ export default function Transactions() {
     } catch (err) {
       alert(`Error al ${action} la transacción`);
       console.error(err);
+    }
+  };
+
+  const handleInlineProjectChange = async (transactionId: number, value: string) => {
+    try {
+      const projectId = value ? parseInt(value) : null;
+      await transactionAPI.updateTransaction(transactionId, { projectId });
+      await loadTransactions();
+    } catch (err) {
+      console.error('Error al cambiar proyecto:', err);
+    }
+  };
+
+  const handleInlineCategoryChange = async (transactionId: number, value: string) => {
+    try {
+      const expenseCategory = (value as ExpenseCategory) || null;
+      await transactionAPI.updateTransaction(transactionId, { expenseCategory });
+      await loadTransactions();
+    } catch (err) {
+      console.error('Error al cambiar categoría:', err);
+    }
+  };
+
+  const handleInlineInvoiceUpload = async (transactionId: number, file: File) => {
+    try {
+      setUploadingInvoiceId(transactionId);
+      const { uploadUrl, key } = await invoiceAPI.getUploadUrl(transactionId, file.name);
+      await invoiceAPI.uploadFile(uploadUrl, file);
+      await invoiceAPI.attachInvoice(transactionId, key, file.name);
+      await loadTransactions();
+    } catch (err) {
+      alert('Error al subir la factura');
+      console.error('Error al subir factura:', err);
+    } finally {
+      setUploadingInvoiceId(null);
     }
   };
 
@@ -302,26 +338,49 @@ export default function Transactions() {
                         {t.amount < 0 ? '-' : '+'}€{formatCurrency(Math.abs(t.amount))}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {t.project ? (
-                          <span className="text-gray-800">{t.project.name}</span>
-                        ) : (
-                          <span className="text-gray-400 italic">Sin asignar</span>
-                        )}
+                        <select
+                          value={t.projectId || ''}
+                          onChange={e => handleInlineProjectChange(t.id, e.target.value)}
+                          className="bg-transparent border-0 text-sm text-gray-800 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white max-w-[160px]"
+                        >
+                          <option value="" className="text-gray-400">Sin asignar</option>
+                          {projects.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-4 py-3">
-                        {t.expenseCategory ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                            {EXPENSE_CATEGORIES.find(c => c.key === t.expenseCategory)?.label}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">Sin categoría</span>
-                        )}
+                        <select
+                          value={t.expenseCategory || ''}
+                          onChange={e => handleInlineCategoryChange(t.id, e.target.value)}
+                          className="bg-transparent border-0 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white max-w-[180px]"
+                        >
+                          <option value="" className="text-gray-400">Sin categoría</option>
+                          {EXPENSE_CATEGORIES.map(cat => (
+                            <option key={cat.key} value={cat.key}>{cat.label}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {t.hasInvoice ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Sí</span>
+                        ) : uploadingInvoiceId === t.id ? (
+                          <Loader2 size={16} className="inline animate-spin text-amber-600" />
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">No</span>
+                          <label className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 cursor-pointer hover:bg-red-200 transition-colors">
+                            No
+                            <Upload size={12} />
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              className="hidden"
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) handleInlineInvoiceUpload(t.id, file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
                         )}
                       </td>
                       <td className="px-4 py-3">
