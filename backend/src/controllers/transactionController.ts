@@ -290,10 +290,10 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       }
     });
 
-    // 🔄 Auto-sync: actualizar todas las transacciones con el mismo concepto (solo isFixed y projectId)
+    // 🔄 Auto-sync: actualizar todas las transacciones con el mismo concepto (solo isFixed y expenseCategory)
     const syncData: any = {};
     if (isFixed !== undefined) syncData.isFixed = isFixed;
-    if (projectId !== undefined) syncData.projectId = projectId === null ? null : projectId;
+    if (expenseCategory !== undefined) syncData.expenseCategory = expenseCategory === null ? null : expenseCategory;
 
     let syncedCount = 0;
     if (Object.keys(syncData).length > 0 && existingTransaction.concept) {
