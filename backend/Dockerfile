@@ -6,6 +6,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# OpenSSL requerido por Prisma para generar binarios correctos
+RUN apk add --no-cache openssl
+
 # Copiar archivos de dependencias
 COPY package*.json ./
 COPY tsconfig.json ./
