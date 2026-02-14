@@ -12,6 +12,7 @@ import syncRoutes from './routes/sync';
 import transactionRoutes from './routes/transactions';
 import dashboardRoutes from './routes/dashboard';
 import invoiceRoutes from './routes/invoices';
+import { configureBucketCors } from './services/cloudflare-r2';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -122,6 +123,14 @@ app.listen(PORT, async () => {
   console.log(`📊 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   await seedDefaultUser();
+
+  // Configurar CORS del bucket R2 para uploads directos
+  try {
+    await configureBucketCors();
+    console.log('✅ CORS de R2 configurado correctamente');
+  } catch (error) {
+    console.warn('⚠️ No se pudo configurar CORS de R2:', (error as Error).message);
+  }
 });
 
 export default app;

@@ -1,5 +1,5 @@
 // 📁 Servicio de Cloudflare R2 para almacenamiento de facturas
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Configuración del cliente S3 para Cloudflare R2
@@ -57,6 +57,28 @@ export async function deleteFile(key: string): Promise<void> {
   const command = new DeleteObjectCommand({
     Bucket: BUCKET_NAME,
     Key: key,
+  });
+
+  await r2Client.send(command);
+}
+
+/**
+ * Configura las reglas CORS del bucket R2 para permitir uploads directos desde el navegador
+ */
+export async function configureBucketCors(): Promise<void> {
+  const command = new PutBucketCorsCommand({
+    Bucket: BUCKET_NAME,
+    CORSConfiguration: {
+      CORSRules: [
+        {
+          AllowedOrigins: ['*'],
+          AllowedMethods: ['GET', 'PUT', 'HEAD'],
+          AllowedHeaders: ['*'],
+          ExposeHeaders: ['ETag'],
+          MaxAgeSeconds: 3600,
+        },
+      ],
+    },
   });
 
   await r2Client.send(command);

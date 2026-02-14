@@ -31,6 +31,10 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
   const [invoiceFileName, setInvoiceFileName] = useState(transaction.invoiceFileName);
   const [isReplacing, setIsReplacing] = useState(false);
 
+  // 👁️ Estados para preview de factura
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
   // Actualizar formData cuando cambia la transacción
   useEffect(() => {
     setFormData({
@@ -44,7 +48,40 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     setSelectedFile(null);
     setUploadError(null);
     setIsReplacing(false);
+    setPreviewUrl(null);
   }, [transaction]);
+
+  // Cargar preview de factura cuando el modal se abre y hay factura
+  useEffect(() => {
+    if (isOpen && hasInvoice && !previewUrl) {
+      loadInvoicePreview();
+    }
+    if (!isOpen) {
+      setPreviewUrl(null);
+    }
+  }, [isOpen, hasInvoice]);
+
+  const loadInvoicePreview = async () => {
+    try {
+      setIsLoadingPreview(true);
+      const { downloadUrl } = await invoiceAPI.getDownloadUrl(transaction.id);
+      setPreviewUrl(downloadUrl);
+    } catch (err) {
+      console.error('Error al cargar preview:', err);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const isImageFile = (fileName: string | null): boolean => {
+    if (!fileName) return false;
+    return /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+  };
+
+  const isPdfFile = (fileName: string | null): boolean => {
+    if (!fileName) return false;
+    return /\.pdf$/i.test(fileName);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +126,9 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       setInvoiceFileName(selectedFile.name);
       setSelectedFile(null);
       setIsReplacing(false);
+      // Recargar preview con la nueva factura
+      setPreviewUrl(null);
+      loadInvoicePreview();
     } catch (err: any) {
       setUploadError(err.message || 'Error al subir la factura');
       console.error(err);
@@ -293,51 +333,84 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
 
               {hasInvoice && !isReplacing ? (
                 // YA TIENE FACTURA
-                <div className="flex items-center justify-between bg-green-50 border border-green-200 p-4 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-8 h-8 text-green-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    <div>
-                      <p className="font-semibold text-green-900">
-                        {invoiceFileName}
-                      </p>
-                      <p className="text-sm text-green-700">Factura adjunta</p>
+                <div className="space-y-3">
+                  {/* Preview de la factura */}
+                  {isLoadingPreview ? (
+                    <div className="flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg p-8">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto"></div>
+                        <p className="text-sm text-gray-500 mt-2">Cargando vista previa...</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      type="button"
-                      onClick={handleViewInvoice}
-                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors"
-                    >
-                      Ver factura
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsReplacing(true)}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
-                    >
-                      Reemplazar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDeleteInvoice}
-                      disabled={isDeleting}
-                      className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium transition-colors disabled:opacity-50"
-                    >
-                      {isDeleting ? 'Eliminando...' : 'Eliminar'}
-                    </button>
+                  ) : previewUrl ? (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                      {isImageFile(invoiceFileName) ? (
+                        <img
+                          src={previewUrl}
+                          alt={invoiceFileName || 'Factura'}
+                          className="w-full max-h-96 object-contain"
+                        />
+                      ) : isPdfFile(invoiceFileName) ? (
+                        <iframe
+                          src={previewUrl}
+                          title={invoiceFileName || 'Factura PDF'}
+                          className="w-full h-96"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center p-8 text-gray-500">
+                          <p className="text-sm">Vista previa no disponible para este tipo de archivo</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* Info y botones */}
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 p-4 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-8 h-8 text-green-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                      <div>
+                        <p className="font-semibold text-green-900">
+                          {invoiceFileName}
+                        </p>
+                        <p className="text-sm text-green-700">Factura adjunta</p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={handleViewInvoice}
+                        className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors"
+                      >
+                        Abrir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsReplacing(true)}
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                      >
+                        Reemplazar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteInvoice}
+                        disabled={isDeleting}
+                        className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium transition-colors disabled:opacity-50"
+                      >
+                        {isDeleting ? 'Eliminando...' : 'Eliminar'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
