@@ -43,7 +43,7 @@ services:
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-lions-invoices-production}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       N8N_SYNC_TOKEN: ${N8N_SYNC_TOKEN}
-      FRONTEND_URL: ${FRONTEND_URL:-https://lions.nubtechagency.com}
+      FRONTEND_URL: ${FRONTEND_URL:-https://lionsandhomes.nubtechagency.com}
     ports:
       - "8000:8000"
     healthcheck:
@@ -61,7 +61,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://api.lions.nubtechagency.com}
+        VITE_API_URL: ${VITE_API_URL:-https://api-lionsandhomes.nubtechagency.com}
     container_name: lions-frontend
     restart: unless-stopped
     depends_on:
