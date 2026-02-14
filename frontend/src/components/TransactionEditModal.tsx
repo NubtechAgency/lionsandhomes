@@ -97,7 +97,7 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     }
   };
 
-  // 📤 FUNCIÓN - Subir factura a Cloudflare R2
+  // 📤 FUNCIÓN - Subir factura via backend proxy
   const handleUploadInvoice = async () => {
     if (!selectedFile) return;
 
@@ -106,19 +106,8 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       setUploadProgress(0);
       setUploadError(null);
 
-      // Paso 1: Obtener URL firmada del backend
-      const { uploadUrl, key } = await invoiceAPI.getUploadUrl(
-        transaction.id,
-        selectedFile.name
-      );
-      setUploadProgress(33);
-
-      // Paso 2: Subir archivo directo a R2
-      await invoiceAPI.uploadFile(uploadUrl, selectedFile);
-      setUploadProgress(66);
-
-      // Paso 3: Asociar factura a la transacción
-      await invoiceAPI.attachInvoice(transaction.id, key, selectedFile.name);
+      setUploadProgress(50);
+      await invoiceAPI.uploadInvoice(transaction.id, selectedFile);
       setUploadProgress(100);
 
       // Actualizar estados locales

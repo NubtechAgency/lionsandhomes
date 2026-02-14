@@ -1,7 +1,9 @@
 // 📄 Rutas de gestión de facturas (Cloudflare R2)
 import { Router } from 'express';
+import multer from 'multer';
 import {
   getUploadUrl,
+  uploadInvoice,
   attachInvoice,
   getInvoiceUrl,
   deleteInvoice,
@@ -9,9 +11,17 @@ import {
 import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // 🔐 Todas las rutas de facturas requieren autenticación
 router.use(authMiddleware);
+
+/**
+ * POST /api/invoices/upload
+ * Sube una factura via multipart y la asocia a la transacción
+ * Body: multipart/form-data con 'file' y 'transactionId'
+ */
+router.post('/upload', upload.single('file'), uploadInvoice);
 
 /**
  * POST /api/invoices/upload-url

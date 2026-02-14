@@ -224,6 +224,34 @@ export const dashboardAPI = {
 
 export const invoiceAPI = {
   /**
+   * Subir factura via backend proxy (evita CORS de R2)
+   */
+  uploadInvoice: async (
+    transactionId: number,
+    file: File
+  ): Promise<{ message: string; transaction: Transaction }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('transactionId', transactionId.toString());
+
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/api/invoices/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Error al subir la factura');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Obtener URL firmada para subir una factura
    */
   getUploadUrl: async (
