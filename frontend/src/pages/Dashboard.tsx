@@ -42,7 +42,7 @@ export default function Dashboard() {
           dashboardAPI.getStats(selectedProjectId),
           transactionAPI.listTransactions(
             selectedProjectId ? { projectId: selectedProjectId } : undefined,
-            500,
+            5000,
             0
           ),
         ]);

@@ -44,7 +44,7 @@ export default function Transactions() {
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState({ totalAmount: 0, withoutInvoice: 0, unassigned: 0 });
+  const [stats, setStats] = useState({ totalExpenses: 0, withoutInvoice: 0, unassigned: 0 });
   const LIMIT = 50;
 
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -178,7 +178,7 @@ export default function Transactions() {
 
   const hasActiveFilters = Object.values(filters).some(v => v !== undefined);
 
-  const { totalAmount, withoutInvoice, unassigned } = stats;
+  const { totalExpenses, withoutInvoice, unassigned } = stats;
 
   return (
     <div className="min-h-screen bg-amber-50/30">
@@ -200,10 +200,10 @@ export default function Transactions() {
             color="amber"
           />
           <KPICard
-            title="Importe Total"
-            value={`€${formatCurrency(Math.abs(totalAmount))}`}
-            subtitle={totalAmount < 0 ? 'Gasto neto' : 'Ingreso neto'}
-            color={totalAmount < 0 ? 'red' : 'green'}
+            title="Gastado Total"
+            value={`€${formatCurrency(totalExpenses)}`}
+            subtitle="Suma de gastos"
+            color={totalExpenses > 0 ? 'red' : 'green'}
           />
           <KPICard
             title="Sin Factura"
@@ -213,9 +213,9 @@ export default function Transactions() {
             color={withoutInvoice > 0 ? 'red' : 'green'}
           />
           <KPICard
-            title="Sin Asignar"
+            title="Sin Proyecto"
             value={unassigned}
-            subtitle="Sin proyecto asignado"
+            subtitle="Gastos sin asignar"
             color={unassigned > 0 ? 'amber' : 'green'}
           />
         </div>

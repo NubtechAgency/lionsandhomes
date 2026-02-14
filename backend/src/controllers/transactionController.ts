@@ -99,20 +99,19 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       skip: parseInt(offset as string)
     });
 
-    // Contar total para paginación + stats agregados
-    const withoutInvoiceWhere: any = { ...where, hasInvoice: false };
-    // Combinar filtro amount existente con lt: 0 para gastos sin factura
+    // Contar total para paginación + stats agregados (solo gastos para KPIs)
+    const expensesOnly: any = { ...where };
     if (where.amount) {
-      withoutInvoiceWhere.amount = { ...where.amount, lt: 0 };
+      expensesOnly.amount = { ...where.amount, lt: 0 };
     } else {
-      withoutInvoiceWhere.amount = { lt: 0 };
+      expensesOnly.amount = { lt: 0 };
     }
 
-    const [total, totalAmountAgg, withoutInvoiceCount, unassignedCount] = await Promise.all([
+    const [total, totalExpensesAgg, withoutInvoiceCount, unassignedCount] = await Promise.all([
       prisma.transaction.count({ where }),
-      prisma.transaction.aggregate({ where, _sum: { amount: true } }),
-      prisma.transaction.count({ where: withoutInvoiceWhere }),
-      prisma.transaction.count({ where: { ...where, projectId: null } }),
+      prisma.transaction.aggregate({ where: expensesOnly, _sum: { amount: true } }),
+      prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false } }),
+      prisma.transaction.count({ where: { ...expensesOnly, projectId: null } }),
     ]);
 
     res.json({
@@ -124,7 +123,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
         hasMore: parseInt(offset as string) + transactions.length < total
       },
       stats: {
-        totalAmount: totalAmountAgg._sum.amount || 0,
+        totalExpenses: Math.abs(totalExpensesAgg._sum.amount || 0),
         withoutInvoice: withoutInvoiceCount,
         unassigned: unassignedCount,
       }

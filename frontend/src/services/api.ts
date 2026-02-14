@@ -149,7 +149,7 @@ export const transactionAPI = {
     transactions: Transaction[];
     pagination: TransactionPagination;
     stats: {
-      totalAmount: number;
+      totalExpenses: number;
       withoutInvoice: number;
       unassigned: number;
     };
@@ -176,7 +176,7 @@ export const transactionAPI = {
       transactions: Transaction[];
       pagination: TransactionPagination;
       stats: {
-        totalAmount: number;
+        totalExpenses: number;
         withoutInvoice: number;
         unassigned: number;
       };
