@@ -135,17 +135,18 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
   try {
     const { name, description, status, totalBudget, categoryBudgets, startDate, endDate } = req.body;
 
-    // Validar campos requeridos (presupuesto es opcional, default 0)
-    if (!name || !startDate) {
+    // Validar campos requeridos (solo nombre es obligatorio)
+    if (!name) {
       res.status(400).json({
         error: 'Datos incompletos',
-        message: 'Nombre y fecha de inicio son requeridos'
+        message: 'El nombre del proyecto es requerido'
       });
       return;
     }
 
-    // Validar que totalBudget sea un número no negativo (0 permitido)
-    if (totalBudget !== undefined && (typeof totalBudget !== 'number' || totalBudget < 0)) {
+    // Validar que totalBudget sea un número no negativo (0 permitido, undefined = 0)
+    const budget = totalBudget !== undefined ? totalBudget : 0;
+    if (typeof budget !== 'number' || budget < 0) {
       res.status(400).json({
         error: 'Presupuesto inválido',
         message: 'El presupuesto total debe ser un número no negativo'
@@ -153,14 +154,8 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Validar categoryBudgets
-    if (typeof categoryBudgets !== 'object') {
-      res.status(400).json({
-        error: 'Desglose inválido',
-        message: 'El desglose de categorías debe ser un objeto'
-      });
-      return;
-    }
+    // categoryBudgets es opcional, default {}
+    const budgets = categoryBudgets && typeof categoryBudgets === 'object' ? categoryBudgets : {};
 
     // Validar estado si se proporciona
     const validStatuses = ['ACTIVE', 'COMPLETED', 'ARCHIVED'];
@@ -178,9 +173,9 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
         name,
         description: description || null,
         status: status || 'ACTIVE',
-        totalBudget,
-        categoryBudgets: JSON.stringify(categoryBudgets),
-        startDate: new Date(startDate),
+        totalBudget: budget,
+        categoryBudgets: JSON.stringify(budgets),
+        startDate: startDate ? new Date(startDate) : new Date(),
         endDate: endDate ? new Date(endDate) : null
       }
     });

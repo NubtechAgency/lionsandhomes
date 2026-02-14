@@ -215,7 +215,8 @@ export default function ProjectForm() {
 
           {/* ===== PRESUPUESTO ===== */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Presupuesto</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-1">Presupuesto</h2>
+            <p className="text-sm text-gray-500 mb-4">Opcional. Puedes configurarlo ahora o editarlo en cualquier momento.</p>
 
             {/* PRESUPUESTO TOTAL */}
             <div className="mb-6">
