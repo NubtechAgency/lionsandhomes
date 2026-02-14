@@ -54,6 +54,7 @@ services:
       start_period: 40s
     networks:
       - lions-network
+      - dokploy-network
 
   # Frontend React
   frontend:
@@ -70,6 +71,7 @@ services:
       - "3002:80"
     networks:
       - lions-network
+      - dokploy-network
 
 # Volúmenes persistentes
 volumes:
@@ -80,3 +82,5 @@ volumes:
 networks:
   lions-network:
     driver: bridge
+  dokploy-network:
+    external: true
