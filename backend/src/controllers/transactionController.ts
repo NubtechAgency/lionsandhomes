@@ -119,6 +119,8 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       amountMin,
       amountMax,
       amountType,
+      sortBy,
+      sortOrder,
       limit = '50',
       offset = '0'
     } = req.query;
@@ -198,7 +200,11 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
         },
         invoices: true,
       },
-      orderBy: { date: 'desc' },
+      orderBy: sortBy === 'amount'
+        ? { amount: sortOrder === 'asc' ? 'asc' : 'desc' }
+        : sortBy === 'concept'
+        ? { concept: sortOrder === 'asc' ? 'asc' : 'desc' }
+        : { date: sortOrder === 'asc' ? 'asc' : 'desc' },
       take: parseInt(limit as string),
       skip: parseInt(offset as string)
     });

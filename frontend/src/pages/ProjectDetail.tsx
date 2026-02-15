@@ -8,7 +8,7 @@ import GaugeChart from '../components/charts/GaugeChart';
 import BudgetVsSpendingChart from '../components/charts/BudgetVsSpendingChart';
 import { formatCurrency, formatPercentage, formatDate } from '../lib/formatters';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
-import { Wallet, Pencil, Trash2, Construction, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Wallet, Pencil, Trash2, Construction, AlertTriangle, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
 import type { ProjectWithStats, Transaction, CategoryStat } from '../types';
 
 export default function ProjectDetail() {
@@ -17,6 +17,8 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<ProjectWithStats | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activeTab, setActiveTab] = useState<'general' | 'transactions' | 'calendar'>('general');
+  const [txSortBy, setTxSortBy] = useState<'date' | 'amount' | 'concept'>('date');
+  const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +123,29 @@ export default function ProjectDetail() {
     COMPLETED: 'Completado',
     ARCHIVED: 'Archivado',
   }[project.status] || project.status;
+
+  const handleTxSort = (column: 'date' | 'amount' | 'concept') => {
+    if (txSortBy === column) {
+      setTxSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+    } else {
+      setTxSortBy(column);
+      setTxSortOrder('desc');
+    }
+  };
+
+  const sortedTransactions = [...transactions].sort((a, b) => {
+    const dir = txSortOrder === 'asc' ? 1 : -1;
+    if (txSortBy === 'amount') return (a.amount - b.amount) * dir;
+    if (txSortBy === 'concept') return a.concept.localeCompare(b.concept) * dir;
+    return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir;
+  });
+
+  const TxSortIcon = ({ column }: { column: string }) => {
+    if (txSortBy !== column) return null;
+    return txSortOrder === 'asc'
+      ? <ArrowUp size={12} className="inline ml-1" />
+      : <ArrowDown size={12} className="inline ml-1" />;
+  };
 
   const tabs = [
     { id: 'general' as const, label: 'Vista general' },
@@ -343,15 +368,21 @@ export default function ProjectDetail() {
             <table className="w-full">
               <thead>
                 <tr className="bg-amber-50/50 text-left">
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-600">Fecha</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-600">Concepto</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right">Importe</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleTxSort('date')}>
+                    Fecha<TxSortIcon column="date" />
+                  </th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleTxSort('concept')}>
+                    Concepto<TxSortIcon column="concept" />
+                  </th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right cursor-pointer hover:text-amber-700 select-none" onClick={() => handleTxSort('amount')}>
+                    Importe<TxSortIcon column="amount" />
+                  </th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-600">Categoría</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-600">Factura</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {transactions.map(t => (
+                {sortedTransactions.map(t => (
                   <tr
                     key={t.id}
                     className="hover:bg-amber-50/30 cursor-pointer transition-colors"

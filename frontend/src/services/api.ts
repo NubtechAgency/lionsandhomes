@@ -182,6 +182,8 @@ export const transactionAPI = {
     if (filters?.amountMin) params.append('amountMin', filters.amountMin.toString());
     if (filters?.amountMax) params.append('amountMax', filters.amountMax.toString());
     if (filters?.amountType) params.append('amountType', filters.amountType);
+    if (filters?.sortBy) params.append('sortBy', filters.sortBy);
+    if (filters?.sortOrder) params.append('sortOrder', filters.sortOrder);
     params.append('limit', limit.toString());
     params.append('offset', offset.toString());
 

@@ -152,6 +152,8 @@ export interface TransactionFilters {
   amountMin?: number;
   amountMax?: number;
   amountType?: 'expense' | 'income';
+  sortBy?: 'date' | 'amount' | 'concept';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface UpdateTransactionData {

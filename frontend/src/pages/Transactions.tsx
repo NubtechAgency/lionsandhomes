@@ -6,7 +6,7 @@ import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp, Plus } from 'lucide-react';
+import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import clsx from 'clsx';
 import type {
   Transaction,
@@ -191,6 +191,7 @@ export default function Transactions() {
     setCurrentPage(0);
   };
 
+
   const handleTabChange = (tab: ViewTab) => {
     setActiveTab(tab);
     setFilters({ amountType: tab === 'expenses' ? 'expense' : 'income' });
@@ -247,7 +248,23 @@ export default function Transactions() {
     }
   };
 
-  const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'amountType' && v !== undefined);
+  const handleSort = (column: 'date' | 'amount' | 'concept') => {
+    setFilters(prev => ({
+      ...prev,
+      sortBy: column,
+      sortOrder: prev.sortBy === column && prev.sortOrder === 'desc' ? 'asc' : 'desc',
+    }));
+    setCurrentPage(0);
+  };
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (filters.sortBy !== column) return null;
+    return filters.sortOrder === 'asc'
+      ? <ArrowUp size={12} className="inline ml-1" />
+      : <ArrowDown size={12} className="inline ml-1" />;
+  };
+
+  const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'amountType' && k !== 'sortBy' && k !== 'sortOrder' && v !== undefined);
 
   const { totalExpenses, withoutInvoice, unassigned } = stats;
 
@@ -483,9 +500,15 @@ export default function Transactions() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-amber-50/50 text-left">
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-600">Fecha</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-600">Concepto</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right">Importe</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('date')}>
+                      Fecha<SortIcon column="date" />
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('concept')}>
+                      Concepto<SortIcon column="concept" />
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('amount')}>
+                      Importe<SortIcon column="amount" />
+                    </th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600">Proyecto</th>
                     {activeTab === 'expenses' && (
                       <>
