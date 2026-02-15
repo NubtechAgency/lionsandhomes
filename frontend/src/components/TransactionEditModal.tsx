@@ -1,16 +1,23 @@
-// Modal de edición de transacciones
+// Modal de edición de transacciones - Multi-invoice
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 import { invoiceAPI } from '../services/api';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import type { Transaction, UpdateTransactionData, ExpenseCategory, Project } from '../types';
+
+interface InvoiceWithUrl {
+  id: number;
+  fileName: string;
+  downloadUrl: string;
+  createdAt: string;
+}
 
 interface Props {
   transaction: Transaction;
   projects: Project[];
   isOpen: boolean;
   onClose: () => void;
-  onSave: (id: number, data: UpdateTransactionData) => Promise<void>;  // Callback para guardar
+  onSave: (id: number, data: UpdateTransactionData) => Promise<void>;
 }
 
 export default function TransactionEditModal({ transaction, projects, isOpen, onClose, onSave }: Props) {
@@ -22,18 +29,18 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  // 📄 Estados para upload de factura
+  // Estados para facturas
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasInvoice, setHasInvoice] = useState(transaction.hasInvoice);
-  const [invoiceFileName, setInvoiceFileName] = useState(transaction.invoiceFileName);
-  const [isReplacing, setIsReplacing] = useState(false);
+  const [invoiceCount, setInvoiceCount] = useState(transaction.invoices?.length || 0);
 
-  // 👁️ Estados para preview de factura
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  // Estados para preview de facturas (múltiples)
+  const [invoicesWithUrls, setInvoicesWithUrls] = useState<InvoiceWithUrl[]>([]);
+  const [isLoadingPreviews, setIsLoadingPreviews] = useState(false);
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<number | null>(null);
 
   // Actualizar formData cuando cambia la transacción
   useEffect(() => {
@@ -44,48 +51,44 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       isFixed: transaction.isFixed,
     });
     setHasInvoice(transaction.hasInvoice);
-    setInvoiceFileName(transaction.invoiceFileName);
+    setInvoiceCount(transaction.invoices?.length || 0);
     setSelectedFile(null);
     setUploadError(null);
-    setIsReplacing(false);
-    setPreviewUrl(null);
+    setInvoicesWithUrls([]);
   }, [transaction]);
 
-  // Cargar preview de factura cuando el modal se abre y hay factura
+  // Cargar previews cuando el modal se abre y hay facturas
   useEffect(() => {
-    if (isOpen && hasInvoice && !previewUrl) {
-      loadInvoicePreview();
+    if (isOpen && hasInvoice && invoicesWithUrls.length === 0) {
+      loadInvoicePreviews();
     }
     if (!isOpen) {
-      setPreviewUrl(null);
+      setInvoicesWithUrls([]);
     }
   }, [isOpen, hasInvoice]);
 
-  const loadInvoicePreview = async () => {
+  const loadInvoicePreviews = async () => {
     try {
-      setIsLoadingPreview(true);
-      const { downloadUrl } = await invoiceAPI.getDownloadUrl(transaction.id);
-      setPreviewUrl(downloadUrl);
+      setIsLoadingPreviews(true);
+      const { invoices } = await invoiceAPI.getInvoiceUrls(transaction.id);
+      setInvoicesWithUrls(invoices);
     } catch (err) {
-      console.error('Error al cargar preview:', err);
+      console.error('Error al cargar previews:', err);
     } finally {
-      setIsLoadingPreview(false);
+      setIsLoadingPreviews(false);
     }
   };
 
-  const isImageFile = (fileName: string | null): boolean => {
-    if (!fileName) return false;
+  const isImageFile = (fileName: string): boolean => {
     return /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
   };
 
-  const isPdfFile = (fileName: string | null): boolean => {
-    if (!fileName) return false;
+  const isPdfFile = (fileName: string): boolean => {
     return /\.pdf$/i.test(fileName);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       setIsSaving(true);
       await onSave(transaction.id, formData);
@@ -97,7 +100,7 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     }
   };
 
-  // 📤 FUNCIÓN - Subir factura via backend proxy
+  // Subir factura (se añade, no reemplaza)
   const handleUploadInvoice = async () => {
     if (!selectedFile) return;
 
@@ -110,14 +113,12 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       await invoiceAPI.uploadInvoice(transaction.id, selectedFile);
       setUploadProgress(100);
 
-      // Actualizar estados locales
       setHasInvoice(true);
-      setInvoiceFileName(selectedFile.name);
+      setInvoiceCount(prev => prev + 1);
       setSelectedFile(null);
-      setIsReplacing(false);
-      // Recargar preview con la nueva factura
-      setPreviewUrl(null);
-      loadInvoicePreview();
+      // Recargar previews
+      setInvoicesWithUrls([]);
+      loadInvoicePreviews();
     } catch (err: any) {
       setUploadError(err.message || 'Error al subir la factura');
       console.error(err);
@@ -127,34 +128,22 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     }
   };
 
-  // 👁️ FUNCIÓN - Ver factura (abrir en nueva pestaña)
-  const handleViewInvoice = async () => {
-    try {
-      const { downloadUrl } = await invoiceAPI.getDownloadUrl(transaction.id);
-      window.open(downloadUrl, '_blank');
-    } catch (err: any) {
-      setUploadError(err.message || 'Error al obtener la factura');
-      console.error(err);
-    }
-  };
-
-  // 🗑️ FUNCIÓN - Eliminar factura
-  const [isDeleting, setIsDeleting] = useState(false);
-  const handleDeleteInvoice = async () => {
+  // Eliminar una factura individual
+  const handleDeleteInvoice = async (invoiceId: number) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta factura?')) return;
 
     try {
-      setIsDeleting(true);
+      setDeletingInvoiceId(invoiceId);
       setUploadError(null);
-      await invoiceAPI.deleteInvoice(transaction.id);
-      setHasInvoice(false);
-      setInvoiceFileName(null);
-      setSelectedFile(null);
+      const { transaction: updated } = await invoiceAPI.deleteInvoice(invoiceId);
+      setHasInvoice(updated.hasInvoice);
+      setInvoiceCount(updated.invoices?.length || 0);
+      setInvoicesWithUrls(prev => prev.filter(inv => inv.id !== invoiceId));
     } catch (err: any) {
       setUploadError(err.message || 'Error al eliminar la factura');
       console.error(err);
     } finally {
-      setIsDeleting(false);
+      setDeletingInvoiceId(null);
     }
   };
 
@@ -176,12 +165,10 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* Body */}
           <div className="p-6 space-y-6">
             {/* Información read-only */}
             <div className="bg-gray-50 p-4 rounded-lg space-y-2">
               <h3 className="font-semibold text-gray-700 mb-3">Información de la Transacción</h3>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-sm text-gray-600">Fecha:</span>
@@ -189,7 +176,6 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
                     {new Date(transaction.date).toLocaleDateString('es-ES')}
                   </p>
                 </div>
-
                 <div>
                   <span className="text-sm text-gray-600">Monto:</span>
                   <p className={`font-bold ${transaction.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -201,17 +187,14 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
                   </p>
                 </div>
               </div>
-
               <div>
                 <span className="text-sm text-gray-600">Concepto:</span>
                 <p className="font-medium">{transaction.concept}</p>
               </div>
-
               <div>
                 <span className="text-sm text-gray-600">Categoría del Banco:</span>
                 <p className="font-medium">{transaction.category}</p>
               </div>
-
               {transaction.isManual && (
                 <div>
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
@@ -316,150 +299,117 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
               </div>
             </div>
 
-            {/* SECCIÓN DE FACTURA */}
+            {/* SECCIÓN DE FACTURAS (múltiples) */}
             <div className="border-t pt-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">📄 Factura</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Facturas {invoiceCount > 0 && <span className="text-sm font-normal text-gray-500">({invoiceCount})</span>}
+              </h3>
 
-              {hasInvoice && !isReplacing ? (
-                // YA TIENE FACTURA
-                <div className="space-y-3">
-                  {/* Preview de la factura */}
-                  {isLoadingPreview ? (
-                    <div className="flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg p-8">
-                      <div className="text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto"></div>
-                        <p className="text-sm text-gray-500 mt-2">Cargando vista previa...</p>
-                      </div>
-                    </div>
-                  ) : previewUrl ? (
-                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-                      {isImageFile(invoiceFileName) ? (
+              {/* Lista de facturas existentes */}
+              {isLoadingPreviews ? (
+                <div className="flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg p-8 mb-4">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto"></div>
+                    <p className="text-sm text-gray-500 mt-2">Cargando facturas...</p>
+                  </div>
+                </div>
+              ) : invoicesWithUrls.length > 0 ? (
+                <div className="space-y-3 mb-4">
+                  {invoicesWithUrls.map((inv) => (
+                    <div key={inv.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* Preview */}
+                      {isImageFile(inv.fileName) ? (
                         <img
-                          src={previewUrl}
-                          alt={invoiceFileName || 'Factura'}
-                          className="w-full max-h-96 object-contain"
+                          src={inv.downloadUrl}
+                          alt={inv.fileName}
+                          className="w-full max-h-64 object-contain bg-gray-50"
                         />
-                      ) : isPdfFile(invoiceFileName) ? (
+                      ) : isPdfFile(inv.fileName) ? (
                         <iframe
-                          src={previewUrl}
-                          title={invoiceFileName || 'Factura PDF'}
-                          className="w-full h-96"
+                          src={inv.downloadUrl}
+                          title={inv.fileName}
+                          className="w-full h-64"
                         />
-                      ) : (
-                        <div className="flex items-center justify-center p-8 text-gray-500">
-                          <p className="text-sm">Vista previa no disponible para este tipo de archivo</p>
+                      ) : null}
+
+                      {/* Info + acciones */}
+                      <div className="flex items-center justify-between bg-green-50 border-t border-green-200 p-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <svg className="w-5 h-5 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <p className="text-sm font-medium text-green-900 truncate">{inv.fileName}</p>
                         </div>
-                      )}
-                    </div>
-                  ) : null}
-
-                  {/* Info y botones */}
-                  <div className="flex items-center justify-between bg-green-50 border border-green-200 p-4 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <svg
-                        className="w-8 h-8 text-green-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        />
-                      </svg>
-                      <div>
-                        <p className="font-semibold text-green-900">
-                          {invoiceFileName}
-                        </p>
-                        <p className="text-sm text-green-700">Factura adjunta</p>
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => window.open(inv.downloadUrl, '_blank')}
+                            className="px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium transition-colors"
+                          >
+                            Abrir
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInvoice(inv.id)}
+                            disabled={deletingInvoiceId === inv.id}
+                            className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50"
+                          >
+                            {deletingInvoiceId === inv.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600" />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
-                      <button
-                        type="button"
-                        onClick={handleViewInvoice}
-                        className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors"
-                      >
-                        Abrir
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsReplacing(true)}
-                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
-                      >
-                        Reemplazar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDeleteInvoice}
-                        disabled={isDeleting}
-                        className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium transition-colors disabled:opacity-50"
-                      >
-                        {isDeleting ? 'Eliminando...' : 'Eliminar'}
-                      </button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ) : (
-                // SIN FACTURA O REEMPLAZANDO
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Subir factura (PDF, JPG, PNG)
-                    </label>
-                    {isReplacing && (
-                      <button
-                        type="button"
-                        onClick={() => { setIsReplacing(false); setSelectedFile(null); }}
-                        className="text-sm text-gray-500 hover:text-gray-700"
-                      >
-                        Cancelar
-                      </button>
-                    )}
+              ) : null}
+
+              {/* Añadir factura (siempre visible) */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  {hasInvoice ? 'Añadir otra factura' : 'Subir factura'} (PDF, JPG, PNG)
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+                />
+
+                {selectedFile && (
+                  <div className="flex items-center justify-between bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                    <p className="text-sm text-amber-900 font-medium truncate">
+                      {selectedFile.name}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleUploadInvoice}
+                      disabled={isUploading}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {isUploading ? 'Subiendo...' : 'Subir'}
+                    </button>
                   </div>
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
-                  />
+                )}
 
-                  {selectedFile && (
-                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 p-3 rounded-lg">
-                      <p className="text-sm text-amber-900 font-medium">
-                        {selectedFile.name}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleUploadInvoice}
-                        disabled={isUploading}
-                        className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isUploading ? 'Subiendo...' : 'Subir factura'}
-                      </button>
+                {isUploading && (
+                  <div className="space-y-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-amber-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
                     </div>
-                  )}
+                    <p className="text-sm text-gray-600 text-center">
+                      {uploadProgress}% completado
+                    </p>
+                  </div>
+                )}
+              </div>
 
-                  {/* PROGRESS BAR */}
-                  {isUploading && (
-                    <div className="space-y-2">
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-amber-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
-                      <p className="text-sm text-gray-600 text-center">
-                        {uploadProgress}% completado
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ERROR DE UPLOAD */}
               {uploadError && (
                 <div className="mt-3 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
                   {uploadError}

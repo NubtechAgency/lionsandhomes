@@ -100,7 +100,8 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
             id: true,
             name: true
           }
-        }
+        },
+        invoices: true,
       },
       orderBy: { date: 'desc' },
       take: parseInt(limit as string),
@@ -171,7 +172,8 @@ export const getTransaction = async (req: Request, res: Response): Promise<void>
             id: true,
             name: true
           }
-        }
+        },
+        invoices: true,
       }
     });
 
@@ -286,7 +288,8 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
             id: true,
             name: true
           }
-        }
+        },
+        invoices: true,
       }
     });
 

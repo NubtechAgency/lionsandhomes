@@ -470,26 +470,35 @@ export default function Transactions() {
                             </select>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {t.hasInvoice ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Sí</span>
-                            ) : uploadingInvoiceId === t.id ? (
-                              <Loader2 size={16} className="inline animate-spin text-amber-600" />
-                            ) : (
-                              <label className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 cursor-pointer hover:bg-red-200 transition-colors">
-                                No
-                                <Upload size={12} />
-                                <input
-                                  type="file"
-                                  accept=".pdf,.jpg,.jpeg,.png"
-                                  className="hidden"
-                                  onChange={e => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handleInlineInvoiceUpload(t.id, file);
-                                    e.target.value = '';
-                                  }}
-                                />
-                              </label>
-                            )}
+                            <div className="inline-flex items-center gap-1">
+                              {t.hasInvoice ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                                  {t.invoices?.length || 1}
+                                </span>
+                              ) : null}
+                              {uploadingInvoiceId === t.id ? (
+                                <Loader2 size={16} className="inline animate-spin text-amber-600" />
+                              ) : (
+                                <label className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-pointer transition-colors ${
+                                  t.hasInvoice
+                                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                    : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                }`}>
+                                  {t.hasInvoice ? '+' : 'No'}
+                                  <Upload size={12} />
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    className="hidden"
+                                    onChange={e => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleInlineInvoiceUpload(t.id, file);
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </label>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button

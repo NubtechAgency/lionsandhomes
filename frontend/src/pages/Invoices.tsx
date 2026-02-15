@@ -106,7 +106,7 @@ export default function Invoices() {
                   <tr key={t.id} className="hover:bg-amber-50/30">
                     <td className="px-4 py-3 text-sm text-gray-600">{formatDate(t.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate">{t.concept}</td>
-                    <td className="px-4 py-3 text-sm text-amber-600">{t.invoiceFileName || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-amber-600">{t.invoices?.map(i => i.fileName).join(', ') || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{t.project?.name || '—'}</td>
                     <td className="px-4 py-3 text-sm font-medium text-right text-red-600">
                       €{formatCurrency(Math.abs(t.amount))}

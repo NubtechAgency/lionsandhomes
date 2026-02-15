@@ -108,6 +108,14 @@ export interface UpdateProjectData {
 // TIPOS DE TRANSACCIONES
 // ========================================
 
+export interface Invoice {
+  id: number;
+  transactionId: number;
+  url: string;
+  fileName: string;
+  createdAt: string;
+}
+
 export interface Transaction {
   id: number;
   externalId: string | null;
@@ -120,8 +128,6 @@ export interface Transaction {
   expenseCategory: ExpenseCategory | null;
   notes: string | null;
   hasInvoice: boolean;
-  invoiceUrl: string | null;
-  invoiceFileName: string | null;
   isArchived: boolean;
   isFixed: boolean;
   createdAt: string;
@@ -130,6 +136,7 @@ export interface Transaction {
     id: number;
     name: string;
   };
+  invoices?: Invoice[];
 }
 
 export interface TransactionFilters {

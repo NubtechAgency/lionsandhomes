@@ -331,7 +331,7 @@ export default function ProjectDetail() {
                       className="bg-white rounded-lg border border-gray-100 p-3 flex justify-between items-center cursor-pointer hover:border-amber-200 hover:shadow-sm transition-all"
                     >
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{t.invoiceFileName}</p>
+                        <p className="text-sm font-medium text-gray-800">{t.invoices?.[0]?.fileName || 'Factura'}</p>
                         <p className="text-xs text-gray-400">{t.concept}</p>
                       </div>
                       <span className="text-sm font-medium text-red-600">

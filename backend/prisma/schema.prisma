@@ -56,8 +56,6 @@ model Transaction {
 
   // Control de factura
   hasInvoice       Boolean           @default(false)
-  invoiceUrl       String?           // URL de Cloudflare R2
-  invoiceFileName  String?
 
   // Archivado (las transacciones NUNCA se borran, solo se archivan)
   isArchived       Boolean           @default(false)
@@ -69,6 +67,7 @@ model Transaction {
   updatedAt        DateTime          @updatedAt
 
   project          Project?          @relation(fields: [projectId], references: [id])
+  invoices         Invoice[]
 
   @@index([projectId])
   @@index([expenseCategory])
@@ -77,6 +76,19 @@ model Transaction {
   @@index([isManual])
   @@index([isArchived])
   @@index([isFixed])
+}
+
+// Facturas adjuntas a transacciones (una transacción puede tener múltiples facturas)
+model Invoice {
+  id            Int      @id @default(autoincrement())
+  transactionId Int
+  url           String   // Key de R2 (ej: invoices/123-1234567890-factura.pdf)
+  fileName      String   // Nombre original del archivo
+  createdAt     DateTime @default(now())
+
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId])
 }
 
 // Categorias de gasto de Lions

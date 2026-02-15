@@ -1,58 +1,13 @@
-// Controller de gestion de facturas (Cloudflare R2)
+// Controller de gestión de facturas (Cloudflare R2) - Multi-invoice
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { generateUploadUrl, generateDownloadUrl, generateInvoiceKey, deleteFile, uploadFileToR2 } from '../services/cloudflare-r2';
+import { generateDownloadUrl, generateInvoiceKey, deleteFile, uploadFileToR2 } from '../services/cloudflare-r2';
 
 const prisma = new PrismaClient();
 
 /**
- * POST /api/invoices/upload-url
- * Genera una URL firmada para que el frontend suba un archivo directamente a R2
- */
-export async function getUploadUrl(req: Request, res: Response): Promise<void> {
-  try {
-    const { transactionId, fileName } = req.body;
-
-    if (!transactionId || !fileName) {
-      res.status(400).json({
-        error: 'Parámetros faltantes',
-        message: 'Se requiere transactionId y fileName',
-      });
-      return;
-    }
-
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: transactionId },
-    });
-
-    if (!transaction) {
-      res.status(404).json({
-        error: 'Transacción no encontrada',
-        message: 'No existe una transacción con ese ID',
-      });
-      return;
-    }
-
-    const key = generateInvoiceKey(transactionId, fileName);
-    const uploadUrl = await generateUploadUrl(key);
-
-    res.json({
-      uploadUrl,
-      key,
-      expiresIn: 600,
-    });
-  } catch (error) {
-    console.error('Error al generar URL de upload:', error);
-    res.status(500).json({
-      error: 'Error del servidor',
-      message: 'Error al generar URL de subida',
-    });
-  }
-}
-
-/**
  * POST /api/invoices/upload
- * Recibe archivo multipart, lo sube a R2, y lo asocia a la transacción
+ * Sube una factura y la asocia a una transacción (permite múltiples por transacción)
  */
 export async function uploadInvoice(req: Request, res: Response): Promise<void> {
   try {
@@ -88,31 +43,25 @@ export async function uploadInvoice(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Si ya tiene factura, borrar la anterior de R2
-    if (transaction.hasInvoice && transaction.invoiceUrl) {
-      try {
-        await deleteFile(transaction.invoiceUrl);
-      } catch (r2Error) {
-        console.error('Error al borrar factura anterior de R2 (continuando):', r2Error);
-      }
-    }
-
     // Generar key y subir a R2
     const key = generateInvoiceKey(txId, file.originalname);
     await uploadFileToR2(key, file.buffer, file.mimetype);
 
-    // Actualizar transacción en DB
+    // Crear registro en tabla Invoice + actualizar hasInvoice
+    await prisma.invoice.create({
+      data: {
+        transactionId: txId,
+        url: key,
+        fileName: file.originalname,
+      },
+    });
+
     const updatedTransaction = await prisma.transaction.update({
       where: { id: txId },
-      data: {
-        hasInvoice: true,
-        invoiceUrl: key,
-        invoiceFileName: file.originalname,
-      },
+      data: { hasInvoice: true },
       include: {
-        project: {
-          select: { id: true, name: true },
-        },
+        project: { select: { id: true, name: true } },
+        invoices: true,
       },
     });
 
@@ -130,74 +79,10 @@ export async function uploadInvoice(req: Request, res: Response): Promise<void> 
 }
 
 /**
- * PATCH /api/transactions/:id/attach-invoice
- * Asocia una factura subida a R2 con una transacción
- */
-export async function attachInvoice(req: Request, res: Response): Promise<void> {
-  try {
-    const transactionId = parseInt(req.params.id as string);
-    const { key, fileName } = req.body;
-
-    if (isNaN(transactionId)) {
-      res.status(400).json({
-        error: 'ID inválido',
-        message: 'El ID de la transacción debe ser un número',
-      });
-      return;
-    }
-
-    if (!key || !fileName) {
-      res.status(400).json({
-        error: 'Parámetros faltantes',
-        message: 'Se requiere key y fileName',
-      });
-      return;
-    }
-
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: transactionId },
-    });
-
-    if (!transaction) {
-      res.status(404).json({
-        error: 'Transacción no encontrada',
-        message: 'No existe una transacción con ese ID',
-      });
-      return;
-    }
-
-    const updatedTransaction = await prisma.transaction.update({
-      where: { id: transactionId },
-      data: {
-        hasInvoice: true,
-        invoiceUrl: key,
-        invoiceFileName: fileName,
-      },
-      include: {
-        project: {
-          select: { id: true, name: true },
-        },
-      },
-    });
-
-    res.json({
-      message: 'Factura asociada exitosamente',
-      transaction: updatedTransaction,
-    });
-  } catch (error) {
-    console.error('Error al asociar factura:', error);
-    res.status(500).json({
-      error: 'Error del servidor',
-      message: 'Error al asociar la factura',
-    });
-  }
-}
-
-/**
  * GET /api/invoices/:transactionId
- * Obtiene la URL de descarga de la factura de una transacción
+ * Obtiene todas las facturas de una transacción con URLs de descarga firmadas
  */
-export async function getInvoiceUrl(req: Request, res: Response): Promise<void> {
+export async function getInvoiceUrls(req: Request, res: Response): Promise<void> {
   try {
     const transactionId = parseInt(req.params.transactionId as string);
 
@@ -209,95 +94,95 @@ export async function getInvoiceUrl(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: transactionId },
+    const invoices = await prisma.invoice.findMany({
+      where: { transactionId },
+      orderBy: { createdAt: 'asc' },
     });
 
-    if (!transaction) {
+    if (invoices.length === 0) {
       res.status(404).json({
-        error: 'Transacción no encontrada',
-        message: 'No existe una transacción con ese ID',
+        error: 'Sin facturas',
+        message: 'Esta transacción no tiene facturas asociadas',
       });
       return;
     }
 
-    if (!transaction.hasInvoice || !transaction.invoiceUrl) {
-      res.status(404).json({
-        error: 'Sin factura',
-        message: 'Esta transacción no tiene una factura asociada',
-      });
-      return;
-    }
-
-    const downloadUrl = await generateDownloadUrl(transaction.invoiceUrl);
+    // Generar URLs firmadas para cada factura
+    const invoicesWithUrls = await Promise.all(
+      invoices.map(async (inv) => ({
+        id: inv.id,
+        fileName: inv.fileName,
+        downloadUrl: await generateDownloadUrl(inv.url),
+        createdAt: inv.createdAt,
+      }))
+    );
 
     res.json({
-      downloadUrl,
-      fileName: transaction.invoiceFileName,
+      invoices: invoicesWithUrls,
       expiresIn: 3600,
     });
   } catch (error) {
-    console.error('Error al obtener URL de factura:', error);
+    console.error('Error al obtener URLs de facturas:', error);
     res.status(500).json({
       error: 'Error del servidor',
-      message: 'Error al obtener la URL de la factura',
+      message: 'Error al obtener las facturas',
     });
   }
 }
 
 /**
- * DELETE /api/invoices/transactions/:id
- * Elimina la factura de una transacción (borra de R2 y limpia campos en DB)
+ * DELETE /api/invoices/:invoiceId
+ * Elimina una factura individual (borra de R2 + registro en DB)
+ * Si era la última, actualiza hasInvoice = false en la transacción
  */
 export async function deleteInvoice(req: Request, res: Response): Promise<void> {
   try {
-    const transactionId = parseInt(req.params.id as string);
+    const invoiceId = parseInt(req.params.invoiceId as string);
 
-    if (isNaN(transactionId)) {
+    if (isNaN(invoiceId)) {
       res.status(400).json({
         error: 'ID inválido',
-        message: 'El ID de la transacción debe ser un número',
+        message: 'El ID de la factura debe ser un número',
       });
       return;
     }
 
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: transactionId },
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
     });
 
-    if (!transaction) {
+    if (!invoice) {
       res.status(404).json({
-        error: 'Transacción no encontrada',
-        message: 'No existe una transacción con ese ID',
+        error: 'Factura no encontrada',
+        message: 'No existe una factura con ese ID',
       });
       return;
     }
 
-    if (!transaction.hasInvoice || !transaction.invoiceUrl) {
-      res.status(404).json({
-        error: 'Sin factura',
-        message: 'Esta transacción no tiene una factura asociada',
-      });
-      return;
-    }
-
+    // Borrar archivo de R2
     try {
-      await deleteFile(transaction.invoiceUrl);
+      await deleteFile(invoice.url);
     } catch (r2Error) {
       console.error('Error al borrar archivo de R2 (continuando con limpieza de DB):', r2Error);
     }
 
+    // Eliminar registro de Invoice
+    await prisma.invoice.delete({
+      where: { id: invoiceId },
+    });
+
+    // Verificar si quedan más facturas para esta transacción
+    const remainingCount = await prisma.invoice.count({
+      where: { transactionId: invoice.transactionId },
+    });
+
+    // Actualizar hasInvoice si era la última
     const updatedTransaction = await prisma.transaction.update({
-      where: { id: transactionId },
-      data: {
-        hasInvoice: false,
-        invoiceUrl: null,
-        invoiceFileName: null,
-      },
+      where: { id: invoice.transactionId },
+      data: { hasInvoice: remainingCount > 0 },
       include: {
-        project: {
-          select: { id: true, name: true },
-        },
+        project: { select: { id: true, name: true } },
+        invoices: true,
       },
     });
 

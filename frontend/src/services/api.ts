@@ -235,7 +235,7 @@ export const dashboardAPI = {
 
 export const invoiceAPI = {
   /**
-   * Subir factura via backend proxy (evita CORS de R2)
+   * Subir factura via backend proxy (añade a la transacción, permite múltiples)
    */
   uploadInvoice: async (
     transactionId: number,
@@ -263,71 +263,25 @@ export const invoiceAPI = {
   },
 
   /**
-   * Obtener URL firmada para subir una factura
+   * Obtener todas las facturas de una transacción con URLs de descarga firmadas
    */
-  getUploadUrl: async (
-    transactionId: number,
-    fileName: string
-  ): Promise<{ uploadUrl: string; key: string; expiresIn: number }> => {
-    return fetchAPI<{ uploadUrl: string; key: string; expiresIn: number }>('/api/invoices/upload-url', {
-      method: 'POST',
-      body: JSON.stringify({ transactionId, fileName }),
-    });
-  },
-
-  /**
-   * Subir archivo directamente a R2 usando URL firmada
-   */
-  uploadFile: async (uploadUrl: string, file: File): Promise<void> => {
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Error al subir el archivo a R2');
-    }
-  },
-
-  /**
-   * Asociar factura subida a una transacción
-   */
-  attachInvoice: async (
-    transactionId: number,
-    key: string,
-    fileName: string
-  ): Promise<{ message: string; transaction: Transaction }> => {
-    return fetchAPI<{ message: string; transaction: Transaction }>(
-      `/api/invoices/transactions/${transactionId}/attach-invoice`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ key, fileName }),
-      }
-    );
-  },
-
-  /**
-   * Obtener URL firmada para descargar una factura
-   */
-  getDownloadUrl: async (
+  getInvoiceUrls: async (
     transactionId: number
-  ): Promise<{ downloadUrl: string; fileName: string; expiresIn: number }> => {
-    return fetchAPI<{ downloadUrl: string; fileName: string; expiresIn: number }>(
-      `/api/invoices/${transactionId}`
-    );
+  ): Promise<{
+    invoices: { id: number; fileName: string; downloadUrl: string; createdAt: string }[];
+    expiresIn: number;
+  }> => {
+    return fetchAPI(`/api/invoices/${transactionId}`);
   },
 
   /**
-   * Eliminar factura de una transacción (borra de R2 y limpia DB)
+   * Eliminar una factura individual por su ID
    */
   deleteInvoice: async (
-    transactionId: number
+    invoiceId: number
   ): Promise<{ message: string; transaction: Transaction }> => {
     return fetchAPI<{ message: string; transaction: Transaction }>(
-      `/api/invoices/transactions/${transactionId}`,
+      `/api/invoices/${invoiceId}`,
       { method: 'DELETE' }
     );
   },
