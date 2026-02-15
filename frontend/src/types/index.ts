@@ -161,6 +161,12 @@ export interface UpdateTransactionData {
   isFixed?: boolean;
 }
 
+export interface CreateTransactionData {
+  date: string;
+  amount: number;
+  concept: string;
+}
+
 export interface TransactionPagination {
   total: number;
   limit: number;

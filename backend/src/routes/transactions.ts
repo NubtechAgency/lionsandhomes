@@ -1,6 +1,7 @@
 // 💰 Rutas de gestión de transacciones
 import { Router } from 'express';
 import {
+  createTransaction,
   listTransactions,
   getTransaction,
   updateTransaction,
@@ -12,6 +13,13 @@ const router = Router();
 
 // 🔐 Todas las rutas de transacciones requieren autenticación
 router.use(authMiddleware);
+
+/**
+ * POST /api/transactions
+ * Crear una transacción manual
+ * Body: { date, amount, concept }
+ */
+router.post('/', createTransaction);
 
 /**
  * GET /api/transactions

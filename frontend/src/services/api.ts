@@ -11,6 +11,7 @@ import type {
   ProjectStatus,
   Transaction,
   TransactionFilters,
+  CreateTransactionData,
   UpdateTransactionData,
   TransactionPagination,
   DashboardStats,
@@ -138,6 +139,18 @@ export const projectAPI = {
 // ========================================
 
 export const transactionAPI = {
+  /**
+   * Crear una transacción manual
+   */
+  createTransaction: async (
+    data: CreateTransactionData
+  ): Promise<{ message: string; transaction: Transaction }> => {
+    return fetchAPI<{ message: string; transaction: Transaction }>('/api/transactions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   /**
    * Listar transacciones con filtros
    */

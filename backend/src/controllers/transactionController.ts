@@ -6,6 +6,68 @@ import { EXPENSE_CATEGORIES } from './projectController';
 const prisma = new PrismaClient();
 
 /**
+ * POST /api/transactions
+ * Crear una transacción manual (gastos en efectivo, etc.)
+ */
+export const createTransaction = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { date, amount, concept } = req.body;
+
+    if (!date || amount === undefined || !concept) {
+      res.status(400).json({
+        error: 'Campos requeridos',
+        message: 'Se requiere date, amount y concept',
+      });
+      return;
+    }
+
+    if (typeof amount !== 'number' || isNaN(amount)) {
+      res.status(400).json({
+        error: 'Importe inválido',
+        message: 'El importe debe ser un número',
+      });
+      return;
+    }
+
+    // Auto-sync por concepto: buscar si ya existe otra transacción con el mismo concepto
+    const existing = await prisma.transaction.findFirst({
+      where: {
+        concept: concept,
+        expenseCategory: { not: null },
+      },
+      select: { expenseCategory: true, isFixed: true },
+    });
+
+    const transaction = await prisma.transaction.create({
+      data: {
+        date: new Date(date),
+        amount,
+        concept,
+        category: 'Manual',
+        isManual: true,
+        expenseCategory: existing?.expenseCategory || null,
+        isFixed: existing?.isFixed || false,
+      },
+      include: {
+        project: { select: { id: true, name: true } },
+        invoices: true,
+      },
+    });
+
+    res.status(201).json({
+      message: 'Transacción manual creada exitosamente',
+      transaction,
+    });
+  } catch (error) {
+    console.error('Error en createTransaction:', error);
+    res.status(500).json({
+      error: 'Error del servidor',
+      message: 'Error al crear la transacción',
+    });
+  }
+};
+
+/**
  * GET /api/transactions
  * Listar transacciones con filtros y paginación
  */

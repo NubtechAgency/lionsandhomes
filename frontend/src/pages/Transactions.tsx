@@ -6,7 +6,7 @@ import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import type {
   Transaction,
@@ -54,6 +54,12 @@ export default function Transactions() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null);
+
+  // Estado para crear transacción manual
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ date: '', amount: '', concept: '' });
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     loadProjects();
@@ -189,6 +195,31 @@ export default function Transactions() {
     setCurrentPage(0);
   };
 
+  const handleCreateTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(createForm.amount);
+    if (!createForm.date || isNaN(amount) || !createForm.concept.trim()) {
+      setCreateError('Todos los campos son obligatorios');
+      return;
+    }
+    try {
+      setIsCreating(true);
+      setCreateError(null);
+      await transactionAPI.createTransaction({
+        date: createForm.date,
+        amount,
+        concept: createForm.concept.trim(),
+      });
+      setShowCreateModal(false);
+      setCreateForm({ date: '', amount: '', concept: '' });
+      await loadTransactions();
+    } catch (err: any) {
+      setCreateError(err.message || 'Error al crear la transacción');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'amountType' && v !== undefined);
 
   const { totalExpenses, withoutInvoice, unassigned } = stats;
@@ -198,9 +229,18 @@ export default function Transactions() {
       <Navbar />
       <div className="p-6 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Transacciones</h1>
-          <p className="text-gray-500 text-sm mt-1">Gestiona y asigna las transacciones bancarias</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Transacciones</h1>
+            <p className="text-gray-500 text-sm mt-1">Gestiona y asigna las transacciones bancarias</p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors"
+          >
+            <Plus size={18} />
+            Nueva transacción
+          </button>
         </div>
 
         {/* Tabs: Gastos / Ingresos */}
@@ -569,7 +609,7 @@ export default function Transactions() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal edición */}
       {selectedTransaction && (
         <TransactionEditModal
           transaction={selectedTransaction}
@@ -578,6 +618,77 @@ export default function Transactions() {
           onClose={() => setIsModalOpen(false)}
           onSave={handleSave}
         />
+      )}
+
+      {/* Modal crear transacción manual */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-amber-600 text-white px-6 py-4 rounded-t-lg flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Nueva Transacción Manual</h2>
+              <button onClick={() => { setShowCreateModal(false); setCreateError(null); }} className="text-white/80 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateTransaction} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                <input
+                  type="date"
+                  value={createForm.date}
+                  onChange={e => setCreateForm(prev => ({ ...prev, date: e.target.value }))}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Importe (€)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={createForm.amount}
+                  onChange={e => setCreateForm(prev => ({ ...prev, amount: e.target.value }))}
+                  placeholder="Negativo para gasto, positivo para ingreso"
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-400 mt-1">Ej: -150.00 para un gasto, 500.00 para un ingreso</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Concepto / Proveedor</label>
+                <input
+                  type="text"
+                  value={createForm.concept}
+                  onChange={e => setCreateForm(prev => ({ ...prev, concept: e.target.value }))}
+                  placeholder="Ej: Ferretería López"
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+              </div>
+              {createError && (
+                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+                  {createError}
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowCreateModal(false); setCreateError(null); }}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium disabled:opacity-50"
+                >
+                  {isCreating ? 'Creando...' : 'Crear Transacción'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

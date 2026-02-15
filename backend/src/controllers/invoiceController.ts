@@ -43,27 +43,41 @@ export async function uploadInvoice(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Generar key y subir a R2
+    // 1. Subir a R2 primero (sistema externo)
     const key = generateInvoiceKey(txId, file.originalname);
     await uploadFileToR2(key, file.buffer, file.mimetype);
 
-    // Crear registro en tabla Invoice + actualizar hasInvoice
-    await prisma.invoice.create({
-      data: {
-        transactionId: txId,
-        url: key,
-        fileName: file.originalname,
-      },
-    });
+    // 2. Operaciones de DB atómicas: crear Invoice + actualizar hasInvoice
+    let updatedTransaction;
+    try {
+      updatedTransaction = await prisma.$transaction(async (tx) => {
+        await tx.invoice.create({
+          data: {
+            transactionId: txId,
+            url: key,
+            fileName: file.originalname,
+          },
+        });
 
-    const updatedTransaction = await prisma.transaction.update({
-      where: { id: txId },
-      data: { hasInvoice: true },
-      include: {
-        project: { select: { id: true, name: true } },
-        invoices: true,
-      },
-    });
+        return tx.transaction.update({
+          where: { id: txId },
+          data: { hasInvoice: true },
+          include: {
+            project: { select: { id: true, name: true } },
+            invoices: true,
+          },
+        });
+      });
+    } catch (dbError) {
+      // DB falló después de R2 → limpiar archivo huérfano de R2
+      console.error('DB falló tras upload a R2, limpiando archivo:', key, dbError);
+      try {
+        await deleteFile(key);
+      } catch (r2CleanupError) {
+        console.error('No se pudo limpiar archivo huérfano en R2:', key, r2CleanupError);
+      }
+      throw dbError;
+    }
 
     res.json({
       message: 'Factura subida exitosamente',
@@ -159,32 +173,30 @@ export async function deleteInvoice(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Borrar archivo de R2
+    // 1. DB atómico: eliminar Invoice + recalcular hasInvoice
+    const updatedTransaction = await prisma.$transaction(async (tx) => {
+      await tx.invoice.delete({ where: { id: invoiceId } });
+
+      const remainingCount = await tx.invoice.count({
+        where: { transactionId: invoice.transactionId },
+      });
+
+      return tx.transaction.update({
+        where: { id: invoice.transactionId },
+        data: { hasInvoice: remainingCount > 0 },
+        include: {
+          project: { select: { id: true, name: true } },
+          invoices: true,
+        },
+      });
+    });
+
+    // 2. Borrar archivo de R2 (best-effort, después del commit de DB)
     try {
       await deleteFile(invoice.url);
     } catch (r2Error) {
-      console.error('Error al borrar archivo de R2 (continuando con limpieza de DB):', r2Error);
+      console.error('Archivo huérfano en R2 (DB ya limpia):', invoice.url, r2Error);
     }
-
-    // Eliminar registro de Invoice
-    await prisma.invoice.delete({
-      where: { id: invoiceId },
-    });
-
-    // Verificar si quedan más facturas para esta transacción
-    const remainingCount = await prisma.invoice.count({
-      where: { transactionId: invoice.transactionId },
-    });
-
-    // Actualizar hasInvoice si era la última
-    const updatedTransaction = await prisma.transaction.update({
-      where: { id: invoice.transactionId },
-      data: { hasInvoice: remainingCount > 0 },
-      include: {
-        project: { select: { id: true, name: true } },
-        invoices: true,
-      },
-    });
 
     res.json({
       message: 'Factura eliminada exitosamente',

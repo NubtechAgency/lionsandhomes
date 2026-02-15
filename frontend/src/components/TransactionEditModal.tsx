@@ -110,11 +110,11 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       setUploadError(null);
 
       setUploadProgress(50);
-      await invoiceAPI.uploadInvoice(transaction.id, selectedFile);
+      const { transaction: updated } = await invoiceAPI.uploadInvoice(transaction.id, selectedFile);
       setUploadProgress(100);
 
-      setHasInvoice(true);
-      setInvoiceCount(prev => prev + 1);
+      setHasInvoice(updated.hasInvoice);
+      setInvoiceCount(updated.invoices?.length || 0);
       setSelectedFile(null);
       // Recargar previews
       setInvoicesWithUrls([]);
