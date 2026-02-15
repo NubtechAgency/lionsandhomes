@@ -6,7 +6,7 @@ import KPICard from '../components/KPICard';
 import DonutChart from '../components/charts/DonutChart';
 import { formatCurrency, formatPercentage } from '../lib/formatters';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
-import { Wallet, TrendingDown, BarChart3, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Wallet, TrendingDown, BarChart3, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { DashboardStats } from '../types';
 
 export default function General() {
@@ -88,7 +88,7 @@ export default function General() {
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <KPICard
                 title="Total Presupuestado"
                 value={`€${formatCurrency(stats.kpis.totalBudget)}`}
@@ -106,21 +106,12 @@ export default function General() {
                 tooltip="Total gastado en todos los proyectos activos"
               />
               <KPICard
-                title="Balance"
+                title="Disponible"
                 value={`€${formatCurrency(Math.max(stats.kpis.totalBudget - stats.kpis.totalSpent, 0))}`}
                 subtitle={stats.kpis.totalBudget - stats.kpis.totalSpent < 0 ? 'Presupuesto excedido' : 'Presupuesto restante'}
                 icon={BarChart3}
                 color={stats.kpis.totalBudget - stats.kpis.totalSpent < 0 ? 'red' : 'blue'}
                 tooltip="Diferencia entre presupuesto total y gasto total"
-              />
-              <KPICard
-                title="Sin Factura"
-                value={stats.kpis.totalWithoutInvoice}
-                subtitle="Transacciones sin documentar"
-                icon={FileText}
-                color={stats.kpis.totalWithoutInvoice > 0 ? 'red' : 'green'}
-                tooltip="Transacciones de gasto que no tienen factura asociada"
-                onClick={() => navigate('/transactions?hasInvoice=false')}
               />
             </div>
 

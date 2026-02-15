@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { dashboardAPI, projectAPI, transactionAPI } from '../services/api';
@@ -7,7 +7,7 @@ import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import ExpenseBarChart from '../components/charts/ExpenseBarChart';
 import BudgetVsSpendingChart from '../components/charts/BudgetVsSpendingChart';
-import { formatCurrency, formatDate } from '../lib/formatters';
+import { formatCurrency } from '../lib/formatters';
 import { FolderOpen, TrendingDown, FileText, FolderX } from 'lucide-react';
 
 export default function Dashboard() {
@@ -57,17 +57,6 @@ export default function Dashboard() {
     };
     loadData();
   }, [selectedProjectId]);
-
-  // Filter transactions from last 7 days
-  const recentTransactions = useMemo(() => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-
-    return allTransactions
-      .filter(t => new Date(t.date) >= sevenDaysAgo)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [allTransactions]);
 
   return (
     <div className="min-h-screen bg-amber-50/30">
@@ -158,68 +147,60 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Last 7 days transactions */}
+            {/* Proyectos activos */}
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-                <h3 className="text-sm font-semibold text-gray-700">Últimos 7 días</h3>
+                <h3 className="text-sm font-semibold text-gray-700">Proyectos Activos</h3>
                 <button
-                  onClick={() => navigate('/transactions')}
+                  onClick={() => navigate('/projects')}
                   className="text-xs text-amber-600 hover:text-amber-700 font-medium"
                 >
-                  Ver todas
+                  Ver todos
                 </button>
               </div>
 
-              {recentTransactions.length === 0 ? (
+              {projects.length === 0 ? (
                 <div className="p-8 text-center text-gray-400">
-                  No hay transacciones en los últimos 7 días
+                  No hay proyectos activos
                 </div>
               ) : (
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-amber-50/50 text-left">
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-600">Fecha</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-600">Concepto</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right">Importe</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-600">Proyecto</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Factura</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {recentTransactions.map(t => (
-                      <tr
-                        key={t.id}
-                        className="hover:bg-amber-50/30 cursor-pointer transition-colors"
-                        onClick={() => navigate(`/transactions?search=${encodeURIComponent(t.concept)}`)}
+                <div className="divide-y divide-gray-50">
+                  {projects.map(p => {
+                    const spent = p.totalSpent || 0;
+                    const remaining = p.totalBudget - spent;
+                    const pct = p.totalBudget > 0 ? (spent / p.totalBudget) * 100 : 0;
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between px-5 py-4 hover:bg-amber-50/30 cursor-pointer transition-colors"
+                        onClick={() => navigate(`/projects/${p.id}`)}
                       >
-                        <td className="px-4 py-3 text-sm text-gray-600">{formatDate(t.date)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate">{t.concept}</td>
-                        <td className={`px-4 py-3 text-sm font-semibold text-right ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {t.amount < 0 ? '-' : '+'}€{formatCurrency(Math.abs(t.amount))}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {t.project ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); navigate(`/projects/${t.project!.id}`); }}
-                              className="text-amber-600 hover:text-amber-700 hover:underline"
-                            >
-                              {t.project.name}
-                            </button>
-                          ) : (
-                            <span className="text-gray-400 italic">Sin asignar</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {t.hasInvoice ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Sí</span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">No</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {p._count?.transactions || 0} transacciones
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4 shrink-0">
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-gray-800">
+                              €{formatCurrency(spent)} / €{formatCurrency(p.totalBudget)}
+                            </p>
+                            <p className={`text-xs ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {remaining < 0 ? 'Excedido' : `€${formatCurrency(remaining)} disponible`}
+                            </p>
+                          </div>
+                          <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${pct > 100 ? 'bg-red-500' : pct > 80 ? 'bg-amber-500' : 'bg-green-500'}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </>

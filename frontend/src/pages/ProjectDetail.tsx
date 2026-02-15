@@ -8,7 +8,7 @@ import GaugeChart from '../components/charts/GaugeChart';
 import BudgetVsSpendingChart from '../components/charts/BudgetVsSpendingChart';
 import { formatCurrency, formatPercentage, formatDate } from '../lib/formatters';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
-import { Wallet, FileText, Pencil, Trash2, Construction, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Wallet, Pencil, Trash2, Construction, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { ProjectWithStats, Transaction, CategoryStat } from '../types';
 
 export default function ProjectDetail() {
@@ -162,14 +162,14 @@ export default function ProjectDetail() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <KPICard
-            title="Presupuesto Restante"
+            title="Disponible"
             value={`€${formatCurrency(remaining)}`}
             subtitle={`€${formatCurrency(stats.totalSpent)} gastado de €${formatCurrency(project.totalBudget)}`}
             icon={Wallet}
-            color={remaining < 0 ? 'red' : 'amber'}
-            tooltip="Diferencia entre el presupuesto total y lo gastado hasta ahora"
+            color={remaining < 0 ? 'red' : 'blue'}
+            tooltip="Diferencia entre presupuesto y gasto total del proyecto"
           />
           <KPICard
             title="Consumido"
@@ -177,14 +177,6 @@ export default function ProjectDetail() {
             subtitle={`${transactions.length} transacciones`}
             color={stats.budgetUsedPercentage > 100 ? 'red' : stats.budgetUsedPercentage > 80 ? 'amber' : 'green'}
             tooltip="Porcentaje del presupuesto total ya gastado en este proyecto"
-          />
-          <KPICard
-            title="Sin Factura"
-            value={stats.transactionsWithoutInvoice}
-            subtitle={`${invoiceCount} con factura`}
-            icon={FileText}
-            color={stats.transactionsWithoutInvoice > 0 ? 'red' : 'green'}
-            tooltip="Gastos de este proyecto que aún no tienen factura adjunta"
           />
           <KPICard
             title="Transacciones"
