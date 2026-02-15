@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
  */
 export const createTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { date, amount, concept } = req.body;
+    const { date, amount, concept, projectId, expenseCategory, notes, isFixed } = req.body;
 
     if (!date || amount === undefined || !concept) {
       res.status(400).json({
@@ -29,14 +29,45 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Auto-sync por concepto: buscar si ya existe otra transacción con el mismo concepto
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        concept: concept,
-        expenseCategory: { not: null },
-      },
-      select: { expenseCategory: true, isFixed: true },
-    });
+    // Validar projectId si se proporciona
+    if (projectId) {
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project) {
+        res.status(400).json({
+          error: 'Proyecto inválido',
+          message: 'El proyecto especificado no existe',
+        });
+        return;
+      }
+    }
+
+    // Validar expenseCategory si se proporciona
+    if (expenseCategory && !EXPENSE_CATEGORIES.includes(expenseCategory)) {
+      res.status(400).json({
+        error: 'Categoría inválida',
+        message: `La categoría debe ser una de: ${EXPENSE_CATEGORIES.join(', ')}`,
+      });
+      return;
+    }
+
+    // Auto-sync por concepto: si no se proporcionó categoría/tipo, heredar de transacciones existentes
+    let syncedCategory = expenseCategory || null;
+    let syncedIsFixed = isFixed ?? false;
+
+    if (!expenseCategory || isFixed === undefined) {
+      const existing = await prisma.transaction.findFirst({
+        where: {
+          concept: concept,
+          expenseCategory: { not: null },
+        },
+        select: { expenseCategory: true, isFixed: true },
+      });
+
+      if (existing) {
+        if (!expenseCategory) syncedCategory = existing.expenseCategory;
+        if (isFixed === undefined) syncedIsFixed = existing.isFixed;
+      }
+    }
 
     const transaction = await prisma.transaction.create({
       data: {
@@ -45,8 +76,10 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
         concept,
         category: 'Manual',
         isManual: true,
-        expenseCategory: existing?.expenseCategory || null,
-        isFixed: existing?.isFixed || false,
+        projectId: projectId || null,
+        expenseCategory: syncedCategory,
+        isFixed: syncedIsFixed,
+        notes: notes || null,
       },
       include: {
         project: { select: { id: true, name: true } },

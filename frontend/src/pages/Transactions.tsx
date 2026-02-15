@@ -57,7 +57,11 @@ export default function Transactions() {
 
   // Estado para crear transacción manual
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ date: '', amount: '', concept: '' });
+  const [createAmountType, setCreateAmountType] = useState<'expense' | 'income'>('expense');
+  const [createForm, setCreateForm] = useState({
+    date: '', amount: '', concept: '',
+    projectId: '' as string, expenseCategory: '' as string, notes: '', isFixed: false,
+  });
   const [createInvoiceFile, setCreateInvoiceFile] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -198,11 +202,12 @@ export default function Transactions() {
 
   const handleCreateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseFloat(createForm.amount);
-    if (!createForm.date || isNaN(amount) || !createForm.concept.trim()) {
-      setCreateError('Todos los campos son obligatorios');
+    const rawAmount = parseFloat(createForm.amount);
+    if (!createForm.date || isNaN(rawAmount) || rawAmount <= 0 || !createForm.concept.trim()) {
+      setCreateError('Todos los campos son obligatorios (importe debe ser positivo)');
       return;
     }
+    const amount = createAmountType === 'expense' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
     try {
       setIsCreating(true);
       setCreateError(null);
@@ -210,6 +215,10 @@ export default function Transactions() {
         date: createForm.date,
         amount,
         concept: createForm.concept.trim(),
+        projectId: createForm.projectId ? parseInt(createForm.projectId) : null,
+        expenseCategory: (createForm.expenseCategory as ExpenseCategory) || null,
+        notes: createForm.notes || null,
+        isFixed: createForm.isFixed,
       });
       // Si hay factura adjunta, subirla
       if (createInvoiceFile) {
@@ -220,8 +229,16 @@ export default function Transactions() {
         }
       }
       setShowCreateModal(false);
-      setCreateForm({ date: '', amount: '', concept: '' });
+      setCreateForm({ date: '', amount: '', concept: '', projectId: '', expenseCategory: '', notes: '', isFixed: false });
+      setCreateAmountType('expense');
       setCreateInvoiceFile(null);
+      // Ir a página 1 y cambiar al tab correcto para ver la nueva transacción
+      const newTab: ViewTab = createAmountType === 'expense' ? 'expenses' : 'income';
+      if (activeTab !== newTab) {
+        setActiveTab(newTab);
+        setFilters({ amountType: newTab === 'expenses' ? 'expense' : 'income' });
+      }
+      setCurrentPage(0);
       await loadTransactions();
     } catch (err: any) {
       setCreateError(err.message || 'Error al crear la transacción');
@@ -633,14 +650,14 @@ export default function Transactions() {
       {/* Modal crear transacción manual */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             <div className="bg-amber-600 text-white px-6 py-4 rounded-t-lg flex items-center justify-between">
               <h2 className="text-lg font-semibold">Nueva Transacción Manual</h2>
               <button onClick={() => { setShowCreateModal(false); setCreateError(null); setCreateInvoiceFile(null); }} className="text-white/80 hover:text-white">
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleCreateTransaction} className="p-6 space-y-4">
+            <form onSubmit={handleCreateTransaction} className="p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
                 <input
@@ -652,17 +669,46 @@ export default function Transactions() {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreateAmountType('expense')}
+                    className={clsx(
+                      'flex-1 px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                      createAmountType === 'expense'
+                        ? 'bg-red-600 text-white border-red-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    )}
+                  >
+                    Gasto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateAmountType('income')}
+                    className={clsx(
+                      'flex-1 px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                      createAmountType === 'income'
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    )}
+                  >
+                    Ingreso
+                  </button>
+                </div>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Importe (€)</label>
                 <input
                   type="number"
                   step="0.01"
+                  min="0.01"
                   value={createForm.amount}
                   onChange={e => setCreateForm(prev => ({ ...prev, amount: e.target.value }))}
-                  placeholder="Negativo para gasto, positivo para ingreso"
+                  placeholder="Ej: 150.00"
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
-                <p className="text-xs text-gray-400 mt-1">Ej: -150.00 para un gasto, 500.00 para un ingreso</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Concepto / Proveedor</label>
@@ -673,6 +719,72 @@ export default function Transactions() {
                   placeholder="Ej: Ferretería López"
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto</label>
+                <select
+                  value={createForm.projectId}
+                  onChange={e => setCreateForm(prev => ({ ...prev, projectId: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                >
+                  <option value="">Sin asignar</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Categoría de gasto</label>
+                <select
+                  value={createForm.expenseCategory}
+                  onChange={e => setCreateForm(prev => ({ ...prev, expenseCategory: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                >
+                  <option value="">Sin categoría</option>
+                  {EXPENSE_CATEGORIES.map(cat => (
+                    <option key={cat.key} value={cat.key}>{cat.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Si vacío y el concepto ya existe, se hereda automáticamente</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de gasto</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreateForm(prev => ({ ...prev, isFixed: false }))}
+                    className={clsx(
+                      'flex-1 px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                      !createForm.isFixed
+                        ? 'bg-gray-800 text-white border-gray-800'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    )}
+                  >
+                    Variable
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateForm(prev => ({ ...prev, isFixed: true }))}
+                    className={clsx(
+                      'flex-1 px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                      createForm.isFixed
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    )}
+                  >
+                    Fijo
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label>
+                <textarea
+                  value={createForm.notes}
+                  onChange={e => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Notas adicionales..."
+                  rows={2}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none"
                 />
               </div>
               <div>

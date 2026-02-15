@@ -165,6 +165,10 @@ export interface CreateTransactionData {
   date: string;
   amount: number;
   concept: string;
+  projectId?: number | null;
+  expenseCategory?: ExpenseCategory | null;
+  notes?: string | null;
+  isFixed?: boolean;
 }
 
 export interface TransactionPagination {
