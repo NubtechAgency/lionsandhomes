@@ -58,6 +58,7 @@ export default function Transactions() {
   // Estado para crear transacción manual
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ date: '', amount: '', concept: '' });
+  const [createInvoiceFile, setCreateInvoiceFile] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -205,13 +206,22 @@ export default function Transactions() {
     try {
       setIsCreating(true);
       setCreateError(null);
-      await transactionAPI.createTransaction({
+      const { transaction: created } = await transactionAPI.createTransaction({
         date: createForm.date,
         amount,
         concept: createForm.concept.trim(),
       });
+      // Si hay factura adjunta, subirla
+      if (createInvoiceFile) {
+        try {
+          await invoiceAPI.uploadInvoice(created.id, createInvoiceFile);
+        } catch (invoiceErr) {
+          console.error('Transacción creada pero error al subir factura:', invoiceErr);
+        }
+      }
       setShowCreateModal(false);
       setCreateForm({ date: '', amount: '', concept: '' });
+      setCreateInvoiceFile(null);
       await loadTransactions();
     } catch (err: any) {
       setCreateError(err.message || 'Error al crear la transacción');
@@ -626,7 +636,7 @@ export default function Transactions() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="bg-amber-600 text-white px-6 py-4 rounded-t-lg flex items-center justify-between">
               <h2 className="text-lg font-semibold">Nueva Transacción Manual</h2>
-              <button onClick={() => { setShowCreateModal(false); setCreateError(null); }} className="text-white/80 hover:text-white">
+              <button onClick={() => { setShowCreateModal(false); setCreateError(null); setCreateInvoiceFile(null); }} className="text-white/80 hover:text-white">
                 <X size={20} />
               </button>
             </div>
@@ -665,6 +675,18 @@ export default function Transactions() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Factura (opcional)</label>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={e => setCreateInvoiceFile(e.target.files?.[0] || null)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+                />
+                {createInvoiceFile && (
+                  <p className="text-xs text-amber-600 mt-1">{createInvoiceFile.name}</p>
+                )}
+              </div>
               {createError && (
                 <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
                   {createError}
@@ -673,7 +695,7 @@ export default function Transactions() {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setShowCreateModal(false); setCreateError(null); }}
+                  onClick={() => { setShowCreateModal(false); setCreateError(null); setCreateInvoiceFile(null); }}
                   className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                 >
                   Cancelar
