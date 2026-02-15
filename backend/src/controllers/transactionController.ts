@@ -307,7 +307,7 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { projectId, expenseCategory, notes, isFixed } = req.body;
+    const { projectId, expenseCategory, notes, isFixed, date, amount, concept } = req.body;
 
     // 🔍 Verificar que la transacción existe
     const existingTransaction = await prisma.transaction.findUnique({
@@ -371,6 +371,22 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
     // Actualizar isFixed
     if (isFixed !== undefined) {
       updateData.isFixed = isFixed;
+    }
+
+    // Campos editables solo para transacciones manuales
+    if (existingTransaction.isManual) {
+      if (date !== undefined) {
+        const parsed = new Date(date);
+        if (!isNaN(parsed.getTime())) {
+          updateData.date = parsed;
+        }
+      }
+      if (amount !== undefined && typeof amount === 'number' && !isNaN(amount)) {
+        updateData.amount = amount;
+      }
+      if (concept !== undefined && typeof concept === 'string' && concept.trim()) {
+        updateData.concept = concept.trim();
+      }
     }
 
     // 💾 Actualizar la transacción en la BD

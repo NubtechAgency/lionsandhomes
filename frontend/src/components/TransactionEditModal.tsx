@@ -1,6 +1,7 @@
 // Modal de edición de transacciones - Multi-invoice
 import { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
+import clsx from 'clsx';
 import { invoiceAPI } from '../services/api';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import type { Transaction, UpdateTransactionData, ExpenseCategory, Project } from '../types';
@@ -29,6 +30,14 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  // Estado para campos editables de transacciones manuales
+  const [editAmountType, setEditAmountType] = useState<'expense' | 'income'>(
+    transaction.amount < 0 ? 'expense' : 'income'
+  );
+  const [editDate, setEditDate] = useState(transaction.date.split('T')[0]);
+  const [editAmount, setEditAmount] = useState(Math.abs(transaction.amount).toString());
+  const [editConcept, setEditConcept] = useState(transaction.concept);
+
   // Estados para facturas
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -50,6 +59,10 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       notes: transaction.notes || '',
       isFixed: transaction.isFixed,
     });
+    setEditAmountType(transaction.amount < 0 ? 'expense' : 'income');
+    setEditDate(transaction.date.split('T')[0]);
+    setEditAmount(Math.abs(transaction.amount).toString());
+    setEditConcept(transaction.concept);
     setHasInvoice(transaction.hasInvoice);
     setInvoiceCount(transaction.invoices?.length || 0);
     setSelectedFile(null);
@@ -91,7 +104,17 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     e.preventDefault();
     try {
       setIsSaving(true);
-      await onSave(transaction.id, formData);
+      const data: UpdateTransactionData = { ...formData };
+      // Incluir campos editables solo para manuales
+      if (transaction.isManual) {
+        const rawAmount = parseFloat(editAmount);
+        if (!isNaN(rawAmount) && rawAmount > 0) {
+          data.amount = editAmountType === 'expense' ? -rawAmount : rawAmount;
+        }
+        if (editDate) data.date = editDate;
+        if (editConcept.trim()) data.concept = editConcept.trim();
+      }
+      await onSave(transaction.id, data);
       onClose();
     } catch (error) {
       console.error('Error al guardar:', error);
@@ -166,43 +189,105 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
 
         <form onSubmit={handleSubmit}>
           <div className="p-6 space-y-6">
-            {/* Información read-only */}
-            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-              <h3 className="font-semibold text-gray-700 mb-3">Información de la Transacción</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-sm text-gray-600">Fecha:</span>
-                  <p className="font-medium">
-                    {new Date(transaction.date).toLocaleDateString('es-ES')}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-600">Monto:</span>
-                  <p className={`font-bold ${transaction.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {transaction.amount < 0 ? '-' : '+'}€
-                    {Math.abs(transaction.amount).toLocaleString('es-ES', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <span className="text-sm text-gray-600">Concepto:</span>
-                <p className="font-medium">{transaction.concept}</p>
-              </div>
-              <div>
-                <span className="text-sm text-gray-600">Categoría del Banco:</span>
-                <p className="font-medium">{transaction.category}</p>
-              </div>
-              {transaction.isManual && (
-                <div>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
-                    Transacción Manual
+            {/* Información de la transacción */}
+            {transaction.isManual ? (
+              <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-semibold text-gray-700">Información de la Transacción</h3>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    Manual
                   </span>
                 </div>
-              )}
-            </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={e => setEditDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Tipo</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditAmountType('expense')}
+                      className={clsx(
+                        'flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors',
+                        editAmountType === 'expense'
+                          ? 'bg-red-600 text-white border-red-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                      )}
+                    >
+                      Gasto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditAmountType('income')}
+                      className={clsx(
+                        'flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors',
+                        editAmountType === 'income'
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                      )}
+                    >
+                      Ingreso
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Importe (€)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={editAmount}
+                    onChange={e => setEditAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Concepto / Proveedor</label>
+                  <input
+                    type="text"
+                    value={editConcept}
+                    onChange={e => setEditConcept(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <h3 className="font-semibold text-gray-700 mb-3">Información de la Transacción</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-600">Fecha:</span>
+                    <p className="font-medium">
+                      {new Date(transaction.date).toLocaleDateString('es-ES')}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Monto:</span>
+                    <p className={`font-bold ${transaction.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {transaction.amount < 0 ? '-' : '+'}€
+                      {Math.abs(transaction.amount).toLocaleString('es-ES', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-600">Concepto:</span>
+                  <p className="font-medium">{transaction.concept}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-600">Categoría del Banco:</span>
+                  <p className="font-medium">{transaction.category}</p>
+                </div>
+              </div>
+            )}
 
             {/* Campos editables */}
             <div className="space-y-4">

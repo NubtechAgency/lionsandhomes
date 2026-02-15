@@ -159,6 +159,9 @@ export interface UpdateTransactionData {
   expenseCategory?: ExpenseCategory | null;
   notes?: string | null;
   isFixed?: boolean;
+  date?: string;
+  amount?: number;
+  concept?: string;
 }
 
 export interface CreateTransactionData {
