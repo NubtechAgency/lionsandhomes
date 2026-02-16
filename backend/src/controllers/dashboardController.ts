@@ -31,44 +31,40 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
     // Total gastado en el mes actual
-    const transactionsThisMonth = await prisma.transaction.aggregate({
-      where: {
-        date: {
-          gte: startOfMonth,
-          lte: endOfMonth,
+    let totalSpentThisMonth: number;
+    if (projectId) {
+      const result = await prisma.transactionProject.aggregate({
+        where: {
+          projectId,
+          amount: { lt: 0 },
+          transaction: { date: { gte: startOfMonth, lte: endOfMonth }, isArchived: false },
         },
-        amount: {
-          lt: 0, // Solo gastos (negativos)
-        },
-        isArchived: false,
-        ...(projectId && { projectId }), // Filtrar por proyecto si se especifica
-      },
-      _sum: {
-        amount: true,
-      },
-    });
-
-    const totalSpentThisMonth = Math.abs(transactionsThisMonth._sum.amount || 0);
+        _sum: { amount: true },
+      });
+      totalSpentThisMonth = Math.abs(result._sum.amount || 0);
+    } else {
+      const result = await prisma.transaction.aggregate({
+        where: { date: { gte: startOfMonth, lte: endOfMonth }, amount: { lt: 0 }, isArchived: false },
+        _sum: { amount: true },
+      });
+      totalSpentThisMonth = Math.abs(result._sum.amount || 0);
+    }
 
     // Total de transacciones sin factura
     const totalWithoutInvoice = await prisma.transaction.count({
       where: {
         hasInvoice: false,
-        amount: {
-          lt: 0, // Solo gastos
-        },
+        amount: { lt: 0 },
         isArchived: false,
-        ...(projectId && { projectId }),
+        ...(projectId && { allocations: { some: { projectId } } }),
       },
     });
 
     // Total de transacciones sin proyecto asignado
     const totalWithoutProject = await prisma.transaction.count({
       where: {
-        projectId: null,
-        amount: {
-          lt: 0, // Solo gastos
-        },
+        allocations: { none: {} },
+        amount: { lt: 0 },
         isArchived: false,
       },
     });
@@ -113,34 +109,42 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
     const categoryExpenses: Record<string, number> = {};
 
     for (const category of EXPENSE_CATEGORIES) {
-      const expenses = await prisma.transaction.aggregate({
-        where: {
-          expenseCategory: category,
-          amount: {
-            lt: 0,
+      let spent: number;
+      if (projectId) {
+        const result = await prisma.transactionProject.aggregate({
+          where: {
+            projectId,
+            amount: { lt: 0 },
+            transaction: { expenseCategory: category, isArchived: false },
           },
-          isArchived: false,
-          ...(projectId && { projectId }),
-        },
-        _sum: {
-          amount: true,
-        },
-      });
-
-      const spent = Math.abs(expenses._sum.amount || 0);
+          _sum: { amount: true },
+        });
+        spent = Math.abs(result._sum.amount || 0);
+      } else {
+        const result = await prisma.transaction.aggregate({
+          where: { expenseCategory: category, amount: { lt: 0 }, isArchived: false },
+          _sum: { amount: true },
+        });
+        spent = Math.abs(result._sum.amount || 0);
+      }
       categoryExpenses[category] = spent;
     }
 
     // Calcular totalSpent REAL (todas las transacciones, no solo las que tienen categoría)
-    const allExpensesAggregate = await prisma.transaction.aggregate({
-      where: {
-        amount: { lt: 0 },
-        isArchived: false,
-        ...(projectId && { projectId }),
-      },
-      _sum: { amount: true },
-    });
-    const totalSpent = Math.abs(allExpensesAggregate._sum.amount || 0);
+    let totalSpent: number;
+    if (projectId) {
+      const result = await prisma.transactionProject.aggregate({
+        where: { projectId, amount: { lt: 0 }, transaction: { isArchived: false } },
+        _sum: { amount: true },
+      });
+      totalSpent = Math.abs(result._sum.amount || 0);
+    } else {
+      const result = await prisma.transaction.aggregate({
+        where: { amount: { lt: 0 }, isArchived: false },
+        _sum: { amount: true },
+      });
+      totalSpent = Math.abs(result._sum.amount || 0);
+    }
 
     // Construir array de categorías con presupuesto vs gasto
     const categoryStats = EXPENSE_CATEGORIES.map((category) => {
@@ -167,7 +171,7 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
     const recentTransactions = await prisma.transaction.findMany({
       where: {
         isArchived: false,
-        ...(projectId && { projectId }),
+        ...(projectId && { allocations: { some: { projectId } } }),
       },
       take: 10,
       orderBy: {
@@ -178,6 +182,11 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
           select: {
             id: true,
             name: true,
+          },
+        },
+        allocations: {
+          include: {
+            project: { select: { id: true, name: true } },
           },
         },
       },
@@ -201,9 +210,9 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
         ? JSON.parse(project.categoryBudgets)
         : (project.categoryBudgets as Record<string, number>);
 
-      // Gasto total del proyecto
-      const projectTotalExpenses = await prisma.transaction.aggregate({
-        where: { projectId: project.id, amount: { lt: 0 }, isArchived: false },
+      // Gasto total del proyecto (desde allocations)
+      const projectTotalExpenses = await prisma.transactionProject.aggregate({
+        where: { projectId: project.id, amount: { lt: 0 }, transaction: { isArchived: false } },
         _sum: { amount: true },
       });
       const projectTotalSpent = Math.abs(projectTotalExpenses._sum.amount || 0);
@@ -225,8 +234,8 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
         const catBudget = budgets[cat] || 0;
         if (catBudget <= 0) continue;
 
-        const catExpenses = await prisma.transaction.aggregate({
-          where: { projectId: project.id, expenseCategory: cat, amount: { lt: 0 }, isArchived: false },
+        const catExpenses = await prisma.transactionProject.aggregate({
+          where: { projectId: project.id, amount: { lt: 0 }, transaction: { expenseCategory: cat, isArchived: false } },
           _sum: { amount: true },
         });
         const catSpent = Math.abs(catExpenses._sum.amount || 0);

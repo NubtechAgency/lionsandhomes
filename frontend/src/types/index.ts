@@ -116,6 +116,17 @@ export interface Invoice {
   createdAt: string;
 }
 
+export interface TransactionAllocation {
+  id: number;
+  transactionId?: number;
+  projectId: number;
+  amount: number;
+  project?: {
+    id: number;
+    name: string;
+  };
+}
+
 export interface Transaction {
   id: number;
   externalId: string | null;
@@ -136,6 +147,7 @@ export interface Transaction {
     id: number;
     name: string;
   };
+  allocations?: TransactionAllocation[];
   invoices?: Invoice[];
 }
 
@@ -158,6 +170,7 @@ export interface TransactionFilters {
 
 export interface UpdateTransactionData {
   projectId?: number | null;
+  allocations?: { projectId: number; amount: number }[];
   expenseCategory?: ExpenseCategory | null;
   notes?: string | null;
   isFixed?: boolean;

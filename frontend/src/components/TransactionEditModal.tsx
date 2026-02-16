@@ -1,6 +1,6 @@
 // Modal de edición de transacciones - Multi-invoice
 import { useState, useEffect } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { invoiceAPI } from '../services/api';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
@@ -11,6 +11,11 @@ interface InvoiceWithUrl {
   fileName: string;
   downloadUrl: string;
   createdAt: string;
+}
+
+interface AllocationRow {
+  projectId: number | null;
+  amount: string;
 }
 
 interface Props {
@@ -51,6 +56,20 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
   const [isLoadingPreviews, setIsLoadingPreviews] = useState(false);
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<number | null>(null);
 
+  // Estado para asignaciones multi-proyecto
+  const [allocations, setAllocations] = useState<AllocationRow[]>(() => {
+    if (transaction.allocations && transaction.allocations.length > 0) {
+      return transaction.allocations.map(a => ({
+        projectId: a.projectId,
+        amount: Math.abs(a.amount).toString(),
+      }));
+    }
+    if (transaction.projectId) {
+      return [{ projectId: transaction.projectId, amount: Math.abs(transaction.amount).toString() }];
+    }
+    return [];
+  });
+
   // Actualizar formData cuando cambia la transacción
   useEffect(() => {
     setFormData({
@@ -68,6 +87,17 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     setSelectedFile(null);
     setUploadError(null);
     setInvoicesWithUrls([]);
+    // Reset allocations
+    if (transaction.allocations && transaction.allocations.length > 0) {
+      setAllocations(transaction.allocations.map(a => ({
+        projectId: a.projectId,
+        amount: Math.abs(a.amount).toString(),
+      })));
+    } else if (transaction.projectId) {
+      setAllocations([{ projectId: transaction.projectId, amount: Math.abs(transaction.amount).toString() }]);
+    } else {
+      setAllocations([]);
+    }
   }, [transaction]);
 
   // Cargar previews cuando el modal se abre y hay facturas
@@ -100,11 +130,71 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
     return /\.pdf$/i.test(fileName);
   };
 
+  // Validación de allocations
+  const transactionTotal = transaction.isManual
+    ? (parseFloat(editAmount) || 0)
+    : Math.abs(transaction.amount);
+  const allocatedTotal = allocations.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
+  const allocationsValid = allocations.length === 0 || Math.abs(transactionTotal - allocatedTotal) < 0.01;
+
+  const getAvailableProjects = (currentIndex: number) => {
+    const selectedIds = allocations
+      .filter((_, i) => i !== currentIndex)
+      .map(a => a.projectId)
+      .filter((id): id is number => id !== null);
+    return projects.filter(p => !selectedIds.includes(p.id));
+  };
+
+  const addAllocation = () => {
+    const remaining = Math.max(0, transactionTotal - allocatedTotal);
+    setAllocations([...allocations, {
+      projectId: null,
+      amount: remaining > 0.01 ? remaining.toFixed(2) : '',
+    }]);
+  };
+
+  const removeAllocation = (index: number) => {
+    const newAllocations = allocations.filter((_, i) => i !== index);
+    if (newAllocations.length === 1) {
+      newAllocations[0] = { ...newAllocations[0], amount: transactionTotal.toFixed(2) };
+    }
+    setAllocations(newAllocations);
+  };
+
+  const updateAllocation = (index: number, field: 'projectId' | 'amount', value: string) => {
+    const newAllocations = [...allocations];
+    if (field === 'projectId') {
+      newAllocations[index] = { ...newAllocations[index], projectId: value ? parseInt(value) : null };
+    } else {
+      newAllocations[index] = { ...newAllocations[index], amount: value };
+    }
+    setAllocations(newAllocations);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setIsSaving(true);
-      const data: UpdateTransactionData = { ...formData };
+      const data: UpdateTransactionData = {
+        expenseCategory: formData.expenseCategory,
+        notes: formData.notes,
+        isFixed: formData.isFixed,
+      };
+
+      // Handle project allocations
+      const validAllocations = allocations.filter(a => a.projectId !== null);
+      if (validAllocations.length > 0) {
+        const sign = transaction.isManual
+          ? (editAmountType === 'expense' ? -1 : 1)
+          : (transaction.amount < 0 ? -1 : 1);
+        data.allocations = validAllocations.map(a => ({
+          projectId: a.projectId!,
+          amount: sign * (parseFloat(a.amount) || 0),
+        }));
+      } else {
+        data.projectId = null;
+      }
+
       // Incluir campos editables solo para manuales
       if (transaction.isManual) {
         const rawAmount = parseFloat(editAmount);
@@ -291,26 +381,79 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
 
             {/* Campos editables */}
             <div className="space-y-4">
-              {/* Proyecto */}
+              {/* Asignación a Proyectos (multi-proyecto) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Asignar a Proyecto
+                  Asignar a Proyectos
                 </label>
-                <select
-                  value={formData.projectId || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    projectId: e.target.value ? parseInt(e.target.value) : null
-                  })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+
+                {allocations.length > 0 ? (
+                  <div className="space-y-2 mb-3">
+                    {allocations.map((alloc, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <select
+                          value={alloc.projectId || ''}
+                          onChange={(e) => updateAllocation(index, 'projectId', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                        >
+                          <option value="">Seleccionar proyecto...</option>
+                          {getAvailableProjects(index).map((project) => (
+                            <option key={project.id} value={project.id}>
+                              {project.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={alloc.amount}
+                            onChange={(e) => updateAllocation(index, 'amount', e.target.value)}
+                            placeholder="0,00"
+                            className="w-28 px-3 py-2 pr-7 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm text-right"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAllocation(index)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 mb-3">Sin asignar a ningún proyecto</p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={addAllocation}
+                  disabled={allocations.length >= projects.length}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <option value="">Sin asignar</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
+                  <Plus size={14} />
+                  Añadir proyecto
+                </button>
+
+                {/* Validación de suma */}
+                {allocations.length > 0 && (
+                  <div className={`mt-3 px-3 py-2 rounded-lg text-sm flex items-center justify-between ${
+                    allocationsValid
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
+                    <span>
+                      Asignado: {allocatedTotal.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
+                      {' / '}
+                      {transactionTotal.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
+                    </span>
+                    <span>{allocationsValid ? '✓' : '✗ No cuadra'}</span>
+                  </div>
+                )}
               </div>
 
               {/* Categoría Lions */}
@@ -515,7 +658,7 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || !allocationsValid}
               className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? 'Guardando...' : 'Guardar Cambios'}

@@ -30,20 +30,20 @@ export const listProjects = async (req: Request, res: Response): Promise<void> =
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
-          select: { transactions: true }
+          select: { allocations: true }
         },
-        transactions: {
-          where: { amount: { lt: 0 }, isArchived: false },
+        allocations: {
+          where: { amount: { lt: 0 }, transaction: { isArchived: false } },
           select: { amount: true }
         }
       }
     });
 
-    // Parsear categoryBudgets y calcular totalSpent
-    const projectsWithStats = projects.map(({ transactions, ...project }) => ({
+    // Parsear categoryBudgets y calcular totalSpent desde allocations
+    const projectsWithStats = projects.map(({ allocations, ...project }) => ({
       ...project,
       categoryBudgets: JSON.parse(project.categoryBudgets),
-      totalSpent: transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0),
+      totalSpent: allocations.reduce((sum, a) => sum + Math.abs(a.amount), 0),
     }));
 
     res.json({
@@ -77,15 +77,16 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       include: {
-        transactions: {
+        allocations: {
           where: {
-            isArchived: false,
-            amount: { lt: 0 }
+            amount: { lt: 0 },
+            transaction: { isArchived: false }
           },
           select: {
             amount: true,
-            hasInvoice: true,
-            expenseCategory: true
+            transaction: {
+              select: { hasInvoice: true, expenseCategory: true }
+            }
           }
         }
       }
@@ -99,9 +100,9 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Calcular estadísticas
-    const totalSpent = project.transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    const transactionsWithoutInvoice = project.transactions.filter(t => !t.hasInvoice).length;
+    // Calcular estadísticas desde allocations
+    const totalSpent = project.allocations.reduce((sum, a) => sum + Math.abs(a.amount), 0);
+    const transactionsWithoutInvoice = project.allocations.filter(a => !a.transaction.hasInvoice).length;
 
     // Parsear categoryBudgets
     const categoryBudgets = JSON.parse(project.categoryBudgets);
@@ -112,7 +113,7 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
         categoryBudgets,
         stats: {
           totalSpent,
-          transactionsCount: project.transactions.length,
+          transactionsCount: project.allocations.length,
           transactionsWithoutInvoice,
           budgetUsedPercentage: (totalSpent / project.totalBudget) * 100
         }
@@ -302,7 +303,7 @@ export const deleteProject = async (req: Request, res: Response): Promise<void> 
       where: { id: projectId },
       include: {
         _count: {
-          select: { transactions: true }
+          select: { allocations: true }
         }
       }
     });
@@ -315,11 +316,11 @@ export const deleteProject = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Advertir si el proyecto tiene transacciones
-    if (existingProject._count.transactions > 0) {
+    // Advertir si el proyecto tiene transacciones asignadas
+    if (existingProject._count.allocations > 0) {
       res.status(400).json({
         error: 'Proyecto con transacciones',
-        message: `Este proyecto tiene ${existingProject._count.transactions} transacciones asociadas. Elimina primero las transacciones o considera archivar el proyecto en su lugar.`
+        message: `Este proyecto tiene ${existingProject._count.allocations} transacciones asociadas. Elimina primero las asignaciones o considera archivar el proyecto en su lugar.`
       });
       return;
     }

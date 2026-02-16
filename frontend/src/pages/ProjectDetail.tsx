@@ -81,6 +81,15 @@ export default function ProjectDetail() {
   const remaining = project.totalBudget - stats.totalSpent;
   const invoiceCount = transactions.filter(t => t.hasInvoice).length;
 
+  // Obtener importe asignado a este proyecto (en vez del total de la transaccion)
+  const getAllocatedAmount = (t: Transaction): number => {
+    if (t.allocations?.length) {
+      const alloc = t.allocations.find(a => a.projectId === project.id);
+      if (alloc) return alloc.amount;
+    }
+    return t.amount;
+  };
+
   // Build categoryStats for the chart
   const categoryStats: CategoryStat[] = Object.keys(project.categoryBudgets).map(key => {
     const budget = (project.categoryBudgets as Record<string, number>)[key] || 0;
@@ -93,14 +102,15 @@ export default function ProjectDetail() {
     };
   });
 
-  // Build spendingByCategory for progress list
+  // Build spendingByCategory for progress list (usando importes asignados)
   const spendingByCategory: Record<string, number> = {};
   const fixedByCategory: Record<string, number> = {};
   let fixedTotal = 0;
   let variableTotal = 0;
   transactions.forEach(t => {
-    if (t.amount < 0) {
-      const amt = Math.abs(t.amount);
+    const allocAmt = getAllocatedAmount(t);
+    if (allocAmt < 0) {
+      const amt = Math.abs(allocAmt);
       if (t.isFixed) fixedTotal += amt;
       else variableTotal += amt;
       if (t.expenseCategory) {
@@ -135,7 +145,7 @@ export default function ProjectDetail() {
 
   const sortedTransactions = [...transactions].sort((a, b) => {
     const dir = txSortOrder === 'asc' ? 1 : -1;
-    if (txSortBy === 'amount') return (a.amount - b.amount) * dir;
+    if (txSortBy === 'amount') return (getAllocatedAmount(a) - getAllocatedAmount(b)) * dir;
     if (txSortBy === 'concept') return a.concept.localeCompare(b.concept) * dir;
     return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir;
   });
@@ -352,7 +362,7 @@ export default function ProjectDetail() {
                         <p className="text-xs text-gray-400">{t.concept}</p>
                       </div>
                       <span className="text-sm font-medium text-red-600">
-                        €{formatCurrency(Math.abs(t.amount))}
+                        €{formatCurrency(Math.abs(getAllocatedAmount(t)))}
                       </span>
                     </div>
                   ))}
@@ -390,8 +400,8 @@ export default function ProjectDetail() {
                   >
                     <td className="px-4 py-3 text-sm text-gray-600">{formatDate(t.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate">{t.concept}</td>
-                    <td className={`px-4 py-3 text-sm font-medium text-right ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {t.amount < 0 ? '-' : '+'}€{formatCurrency(Math.abs(t.amount))}
+                    <td className={`px-4 py-3 text-sm font-medium text-right ${getAllocatedAmount(t) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {getAllocatedAmount(t) < 0 ? '-' : '+'}€{formatCurrency(Math.abs(getAllocatedAmount(t)))}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {t.expenseCategory || '—'}

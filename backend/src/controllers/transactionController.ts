@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
  */
 export const createTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { date, amount, concept, projectId, expenseCategory, notes, isFixed } = req.body;
+    const { date, amount, concept, projectId, allocations: bodyAllocations, expenseCategory, notes, isFixed } = req.body;
 
     if (!date || amount === undefined || !concept) {
       res.status(400).json({
@@ -29,8 +29,25 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Validar projectId si se proporciona
-    if (projectId) {
+    // Validar allocations si se proporcionan (multi-proyecto)
+    if (bodyAllocations && Array.isArray(bodyAllocations) && bodyAllocations.length > 0) {
+      const allocSum = bodyAllocations.reduce((s: number, a: any) => s + a.amount, 0);
+      if (Math.abs(allocSum - amount) > 0.01) {
+        res.status(400).json({
+          error: 'Suma incorrecta',
+          message: 'La suma de las asignaciones debe ser igual al importe de la transacción',
+        });
+        return;
+      }
+      for (const alloc of bodyAllocations) {
+        const p = await prisma.project.findUnique({ where: { id: alloc.projectId } });
+        if (!p) {
+          res.status(400).json({ error: 'Proyecto inválido', message: `El proyecto ${alloc.projectId} no existe` });
+          return;
+        }
+      }
+    } else if (projectId) {
+      // Validar projectId si se proporciona (single project)
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) {
         res.status(400).json({
@@ -69,6 +86,11 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
       }
     }
 
+    // Determinar projectId denormalizado
+    const effectiveProjectId = bodyAllocations?.length > 0
+      ? bodyAllocations[0].projectId
+      : (projectId || null);
+
     const transaction = await prisma.transaction.create({
       data: {
         date: new Date(date),
@@ -76,20 +98,45 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
         concept,
         category: 'Manual',
         isManual: true,
-        projectId: projectId || null,
+        projectId: effectiveProjectId,
         expenseCategory: syncedCategory,
         isFixed: syncedIsFixed,
         notes: notes || null,
       },
+    });
+
+    // Crear allocations en TransactionProject
+    if (bodyAllocations && Array.isArray(bodyAllocations) && bodyAllocations.length > 0) {
+      await prisma.transactionProject.createMany({
+        data: bodyAllocations.map((a: any) => ({
+          transactionId: transaction.id,
+          projectId: a.projectId,
+          amount: a.amount,
+        })),
+      });
+    } else if (projectId) {
+      await prisma.transactionProject.create({
+        data: {
+          transactionId: transaction.id,
+          projectId,
+          amount,
+        },
+      });
+    }
+
+    // Re-fetch con includes completos
+    const fullTransaction = await prisma.transaction.findUnique({
+      where: { id: transaction.id },
       include: {
         project: { select: { id: true, name: true } },
+        allocations: { include: { project: { select: { id: true, name: true } } } },
         invoices: true,
       },
     });
 
     res.status(201).json({
       message: 'Transacción manual creada exitosamente',
-      transaction,
+      transaction: fullTransaction,
     });
   } catch (error) {
     console.error('Error en createTransaction:', error);
@@ -138,9 +185,9 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
     }
 
     if (projectId === 'none') {
-      where.projectId = null; // Filter transactions without project
+      where.allocations = { none: {} }; // Transactions without any project allocation
     } else if (projectId) {
-      where.projectId = parseInt(projectId as string);
+      where.allocations = { some: { projectId: parseInt(projectId as string) } };
     }
 
     if (expenseCategory) {
@@ -198,6 +245,11 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
             name: true
           }
         },
+        allocations: {
+          include: {
+            project: { select: { id: true, name: true } }
+          }
+        },
         invoices: true,
       },
       orderBy: sortBy === 'amount'
@@ -221,7 +273,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       prisma.transaction.count({ where }),
       prisma.transaction.aggregate({ where: expensesOnly, _sum: { amount: true } }),
       prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false } }),
-      prisma.transaction.count({ where: { ...expensesOnly, projectId: null } }),
+      prisma.transaction.count({ where: { ...expensesOnly, allocations: { none: {} } } }),
     ]);
 
     res.json({
@@ -274,6 +326,11 @@ export const getTransaction = async (req: Request, res: Response): Promise<void>
             name: true
           }
         },
+        allocations: {
+          include: {
+            project: { select: { id: true, name: true } }
+          }
+        },
         invoices: true,
       }
     });
@@ -313,11 +370,12 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { projectId, expenseCategory, notes, isFixed, date, amount, concept } = req.body;
+    const { projectId, allocations: bodyAllocations, expenseCategory, notes, isFixed, date, amount, concept } = req.body;
 
     // 🔍 Verificar que la transacción existe
     const existingTransaction = await prisma.transaction.findUnique({
-      where: { id: transactionId }
+      where: { id: transactionId },
+      include: { allocations: true },
     });
 
     if (!existingTransaction) {
@@ -395,6 +453,54 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       }
     }
 
+    // Manejar allocations (multi-proyecto)
+    if (bodyAllocations && Array.isArray(bodyAllocations)) {
+      if (bodyAllocations.length > 0) {
+        // Validar que todos los proyectos existen
+        for (const alloc of bodyAllocations) {
+          const p = await prisma.project.findUnique({ where: { id: alloc.projectId } });
+          if (!p) {
+            res.status(400).json({ error: 'Proyecto inválido', message: `El proyecto ${alloc.projectId} no existe` });
+            return;
+          }
+        }
+        // Validar suma = importe de la transacción
+        const txAmount = amount !== undefined ? amount : existingTransaction.amount;
+        const allocSum = bodyAllocations.reduce((s: number, a: any) => s + a.amount, 0);
+        if (Math.abs(allocSum - txAmount) > 0.01) {
+          res.status(400).json({
+            error: 'Suma incorrecta',
+            message: 'La suma de las asignaciones debe ser igual al importe de la transacción',
+          });
+          return;
+        }
+        // Reemplazar allocations: borrar existentes, crear nuevas
+        await prisma.transactionProject.deleteMany({ where: { transactionId } });
+        await prisma.transactionProject.createMany({
+          data: bodyAllocations.map((a: any) => ({
+            transactionId,
+            projectId: a.projectId,
+            amount: a.amount,
+          })),
+        });
+        // Denormalize: projectId = primer allocation
+        updateData.projectId = bodyAllocations[0].projectId;
+      } else {
+        // allocations = [] → quitar todas las asignaciones
+        await prisma.transactionProject.deleteMany({ where: { transactionId } });
+        updateData.projectId = null;
+      }
+    } else if (projectId !== undefined) {
+      // Inline dropdown: single project change
+      await prisma.transactionProject.deleteMany({ where: { transactionId } });
+      if (projectId !== null) {
+        const txAmount = amount !== undefined ? amount : existingTransaction.amount;
+        await prisma.transactionProject.create({
+          data: { transactionId, projectId, amount: txAmount },
+        });
+      }
+    }
+
     // 💾 Actualizar la transacción en la BD
     const transaction = await prisma.transaction.update({
       where: { id: transactionId },
@@ -404,6 +510,11 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
           select: {
             id: true,
             name: true
+          }
+        },
+        allocations: {
+          include: {
+            project: { select: { id: true, name: true } }
           }
         },
         invoices: true,

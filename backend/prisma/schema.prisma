@@ -34,6 +34,7 @@ model Project {
   updatedAt        DateTime @updatedAt
 
   transactions     Transaction[]
+  allocations      TransactionProject[]
 
   @@index([status])
 }
@@ -67,6 +68,7 @@ model Transaction {
   updatedAt        DateTime          @updatedAt
 
   project          Project?          @relation(fields: [projectId], references: [id])
+  allocations      TransactionProject[]
   invoices         Invoice[]
 
   @@index([projectId])
@@ -89,6 +91,22 @@ model Invoice {
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 
   @@index([transactionId])
+}
+
+// Asignación de transacciones a proyectos (multi-proyecto con importe)
+model TransactionProject {
+  id            Int         @id @default(autoincrement())
+  transactionId Int
+  projectId     Int
+  amount        Float       // Importe asignado (mismo signo que Transaction.amount)
+  createdAt     DateTime    @default(now())
+
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  project       Project     @relation(fields: [projectId], references: [id])
+
+  @@unique([transactionId, projectId])
+  @@index([transactionId])
+  @@index([projectId])
 }
 
 // Categorias de gasto de Lions

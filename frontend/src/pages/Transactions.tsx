@@ -206,6 +206,15 @@ export default function Transactions() {
     handleEdit(transaction);
   };
 
+  // Importe a mostrar: asignado al proyecto filtrado si aplica, si no el total
+  const getDisplayAmount = (t: Transaction): number => {
+    if (filters.projectId && filters.projectId > 0 && t.allocations?.length) {
+      const alloc = t.allocations.find(a => a.projectId === filters.projectId);
+      if (alloc) return alloc.amount;
+    }
+    return t.amount;
+  };
+
   const handleCreateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     const rawAmount = parseFloat(createForm.amount);
@@ -581,20 +590,30 @@ export default function Transactions() {
                         <p className="text-sm font-medium text-gray-800 truncate max-w-xs">{t.concept}</p>
                         <p className="text-xs text-gray-400">{t.category}</p>
                       </td>
-                      <td className={`px-4 py-3 text-sm font-semibold text-right whitespace-nowrap ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {t.amount < 0 ? '-' : '+'}€{formatCurrency(Math.abs(t.amount))}
+                      <td className={`px-4 py-3 text-sm font-semibold text-right whitespace-nowrap ${getDisplayAmount(t) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {getDisplayAmount(t) < 0 ? '-' : '+'}€{formatCurrency(Math.abs(getDisplayAmount(t)))}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <select
-                          value={t.projectId || ''}
-                          onChange={e => handleInlineProjectChange(t.id, e.target.value)}
-                          className="bg-transparent border-0 text-sm text-gray-800 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white max-w-[160px]"
-                        >
-                          <option value="" className="text-gray-400">Sin asignar</option>
-                          {projects.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
+                        {t.allocations && t.allocations.length > 1 ? (
+                          <button
+                            onClick={() => handleEdit(t)}
+                            className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors"
+                            title={t.allocations.map(a => a.project?.name || `Proyecto ${a.projectId}`).join(', ')}
+                          >
+                            {t.allocations.length} proyectos
+                          </button>
+                        ) : (
+                          <select
+                            value={t.allocations?.[0]?.projectId || t.projectId || ''}
+                            onChange={e => handleInlineProjectChange(t.id, e.target.value)}
+                            className="bg-transparent border-0 text-sm text-gray-800 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white max-w-[160px]"
+                          >
+                            <option value="" className="text-gray-400">Sin asignar</option>
+                            {projects.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        )}
                       </td>
                       {activeTab === 'expenses' && (
                         <>
