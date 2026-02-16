@@ -175,11 +175,25 @@ export default function Transactions() {
   };
 
   const handleAmountFilterApply = () => {
-    const val = amountInput ? parseFloat(amountInput) : undefined;
+    if (!amountInput.trim()) {
+      setFilters(prev => ({ ...prev, amountMin: undefined, amountMax: undefined }));
+      setCurrentPage(0);
+      return;
+    }
+    // Strip €, -, spaces and normalize comma to dot
+    const cleaned = amountInput.replace(/[€\-\s]/g, '').replace(',', '.').trim();
+    const val = parseFloat(cleaned);
+    if (isNaN(val)) return;
+
+    // Range based on precision: "150" → [150, 150.99], "150.5" → [150.5, 150.59]
+    const decimalPart = cleaned.split('.')[1];
+    const precision = decimalPart ? decimalPart.length : 0;
+    const maxVal = precision >= 2 ? val : precision === 1 ? val + 0.09 : val + 0.99;
+
     setFilters(prev => ({
       ...prev,
       amountMin: val,
-      amountMax: val,
+      amountMax: parseFloat(maxVal.toFixed(2)),
     }));
     setCurrentPage(0);
   };
@@ -460,7 +474,7 @@ export default function Transactions() {
                 onChange={e => setAmountInput(e.target.value)}
                 onBlur={handleAmountFilterApply}
                 onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
-                placeholder="Importe exacto €"
+                placeholder="Buscar importe..."
                 className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
             )}
