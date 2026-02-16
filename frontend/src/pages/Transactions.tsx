@@ -42,14 +42,13 @@ export default function Transactions() {
   const [activeTab, setActiveTab] = useState<ViewTab>('expenses');
   const [filters, setFilters] = useState<TransactionFilters>({ ...initialFilters(), amountType: 'expense' });
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
-  const [amountMinInput, setAmountMinInput] = useState('');
-  const [amountMaxInput, setAmountMaxInput] = useState('');
+  const [amountInput, setAmountInput] = useState('');
 
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState({ totalExpenses: 0, withoutInvoice: 0, unassigned: 0 });
-  const LIMIT = 50;
+  const [pageSize, setPageSize] = useState(50);
 
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -72,7 +71,7 @@ export default function Transactions() {
 
   useEffect(() => {
     loadTransactions();
-  }, [filters, currentPage]);
+  }, [filters, currentPage, pageSize]);
 
   const loadProjects = async () => {
     try {
@@ -87,7 +86,8 @@ export default function Transactions() {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await transactionAPI.listTransactions(filters, LIMIT, currentPage * LIMIT);
+      const effectiveLimit = pageSize === 0 ? 10000 : pageSize;
+      const response = await transactionAPI.listTransactions(filters, effectiveLimit, currentPage * effectiveLimit);
       setTransactions(response.transactions);
       setHasMore(response.pagination.hasMore);
       setTotal(response.pagination.total);
@@ -175,10 +175,11 @@ export default function Transactions() {
   };
 
   const handleAmountFilterApply = () => {
+    const val = amountInput ? parseFloat(amountInput) : undefined;
     setFilters(prev => ({
       ...prev,
-      amountMin: amountMinInput ? parseFloat(amountMinInput) : undefined,
-      amountMax: amountMaxInput ? parseFloat(amountMaxInput) : undefined,
+      amountMin: val,
+      amountMax: val,
     }));
     setCurrentPage(0);
   };
@@ -186,8 +187,7 @@ export default function Transactions() {
   const clearFilters = () => {
     setFilters({ amountType: activeTab === 'expenses' ? 'expense' : 'income' });
     setSearchInput('');
-    setAmountMinInput('');
-    setAmountMaxInput('');
+    setAmountInput('');
     setCurrentPage(0);
   };
 
@@ -196,9 +196,14 @@ export default function Transactions() {
     setActiveTab(tab);
     setFilters({ amountType: tab === 'expenses' ? 'expense' : 'income' });
     setSearchInput('');
-    setAmountMinInput('');
-    setAmountMaxInput('');
+    setAmountInput('');
     setCurrentPage(0);
+  };
+
+  const handleRowClick = (e: React.MouseEvent, transaction: Transaction) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('select, button, input, label, a')) return;
+    handleEdit(transaction);
   };
 
   const handleCreateTransaction = async (e: React.FormEvent) => {
@@ -419,16 +424,13 @@ export default function Transactions() {
             <input
               type="date"
               value={filters.dateFrom || ''}
-              onChange={e => handleFilterChange('dateFrom', e.target.value)}
+              onChange={e => {
+                const val = e.target.value;
+                setFilters(prev => ({ ...prev, dateFrom: val || undefined, dateTo: val || undefined }));
+                setCurrentPage(0);
+              }}
               className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-              placeholder="Desde"
-            />
-            <input
-              type="date"
-              value={filters.dateTo || ''}
-              onChange={e => handleFilterChange('dateTo', e.target.value)}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-              placeholder="Hasta"
+              placeholder="Fecha exacta"
             />
             {activeTab === 'expenses' && (
               <select
@@ -442,29 +444,37 @@ export default function Transactions() {
               </select>
             )}
             {activeTab === 'expenses' && (
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={amountMinInput}
-                  onChange={e => setAmountMinInput(e.target.value)}
-                  onBlur={handleAmountFilterApply}
-                  onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
-                  placeholder="Min €"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={amountMaxInput}
-                  onChange={e => setAmountMaxInput(e.target.value)}
-                  onBlur={handleAmountFilterApply}
-                  onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
-                  placeholder="Max €"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amountInput}
+                onChange={e => setAmountInput(e.target.value)}
+                onBlur={handleAmountFilterApply}
+                onKeyDown={e => e.key === 'Enter' && handleAmountFilterApply()}
+                placeholder="Importe exacto €"
+                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
             )}
+            <select
+              value={filters.sortBy && filters.sortOrder ? `${filters.sortBy}-${filters.sortOrder}` : ''}
+              onChange={e => {
+                const val = e.target.value;
+                if (!val) {
+                  setFilters(prev => ({ ...prev, sortBy: undefined, sortOrder: undefined }));
+                } else {
+                  const [sortBy, sortOrder] = val.split('-') as ['date' | 'amount', 'asc' | 'desc'];
+                  setFilters(prev => ({ ...prev, sortBy, sortOrder }));
+                }
+                setCurrentPage(0);
+              }}
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="">Ordenar por...</option>
+              <option value="date-desc">Fecha: Más reciente</option>
+              <option value="date-asc">Fecha: Más antigua</option>
+              <option value="amount-desc">Importe: Mayor</option>
+              <option value="amount-asc">Importe: Menor</option>
+            </select>
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
@@ -475,6 +485,47 @@ export default function Transactions() {
             )}
           </div>
         </div>
+
+        {/* Pagination - above table */}
+        {!isLoading && !error && transactions.length > 0 && (
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-gray-500">
+                {pageSize === 0
+                  ? `${transactions.length} transacciones`
+                  : `${currentPage * pageSize + 1}–${currentPage * pageSize + transactions.length} de ${total}`
+                }
+              </p>
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(0); }}
+                className="px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value={50}>50 por página</option>
+                <option value={100}>100 por página</option>
+                <option value={0}>Todas</option>
+              </select>
+            </div>
+            {pageSize > 0 && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => p - 1)}
+                  disabled={currentPage === 0}
+                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => p + 1)}
+                  disabled={!hasMore}
+                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
@@ -522,7 +573,7 @@ export default function Transactions() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {transactions.map(t => (
-                    <tr key={t.id} className="hover:bg-amber-50/30 transition-colors">
+                    <tr key={t.id} onClick={(e) => handleRowClick(e, t)} className="hover:bg-amber-50/30 transition-colors cursor-pointer">
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                         {formatDate(t.date)}
                       </td>
@@ -633,30 +684,6 @@ export default function Transactions() {
           )}
         </div>
 
-        {/* Pagination */}
-        {!isLoading && !error && transactions.length > 0 && (
-          <div className="flex justify-between items-center mt-4">
-            <p className="text-sm text-gray-500">
-              {currentPage * LIMIT + 1}–{currentPage * LIMIT + transactions.length} de {total}
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage(p => p - 1)}
-                disabled={currentPage === 0}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => setCurrentPage(p => p + 1)}
-                disabled={!hasMore}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Modal edición */}
