@@ -266,6 +266,8 @@ export default function ProjectDetail() {
               total={project.totalBudget}
               label="Total"
               size="lg"
+              fixed={fixedTotal}
+              variable={variableTotal}
             />
           </div>
 
@@ -279,12 +281,15 @@ export default function ProjectDetail() {
                   const cat = EXPENSE_CATEGORIES.find(c => c.key === key);
                   const budget = (project.categoryBudgets as Record<string, number>)[key] || 0;
                   const spent = spendingByCategory[key] || 0;
+                  const catFixed = fixedByCategory[key] || 0;
                   return (
                     <DonutChart
                       key={key}
                       spent={spent}
                       total={budget}
                       label={cat?.label || key}
+                      fixed={catFixed}
+                      variable={spent - catFixed}
                     />
                   );
                 })}

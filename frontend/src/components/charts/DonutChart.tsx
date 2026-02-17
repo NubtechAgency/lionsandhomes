@@ -6,9 +6,11 @@ interface Props {
   total: number;
   label: string;
   size?: 'sm' | 'lg';
+  fixed?: number;
+  variable?: number;
 }
 
-export default function DonutChart({ spent, total, label, size = 'sm' }: Props) {
+export default function DonutChart({ spent, total, label, size = 'sm', fixed, variable }: Props) {
   const noBudget = total <= 0 && spent > 0;
   const percentage = noBudget ? 100 : total > 0 ? Math.min((spent / total) * 100, 999) : 0;
   const remaining = Math.max(total - spent, 0);
@@ -23,12 +25,33 @@ export default function DonutChart({ spent, total, label, size = 'sm' }: Props) 
 
   const color = getColor();
 
+  // 3-segment mode: fixed + variable + remaining
+  const hasBreakdown = fixed !== undefined && variable !== undefined;
+
   const data = overBudget
-    ? [{ value: 100 }]
+    ? hasBreakdown
+      ? [
+          { value: variable || 0, type: 'variable' },
+          { value: fixed || 0, type: 'fixed' },
+        ]
+      : [{ value: 100, type: 'spent' }]
+    : hasBreakdown
+    ? [
+        { value: variable || 0, type: 'variable' },
+        { value: fixed || 0, type: 'fixed' },
+        { value: remaining, type: 'remaining' },
+      ].filter(d => d.value > 0)
     : [
         { value: spent, type: 'spent' },
         { value: remaining, type: 'remaining' },
       ];
+
+  const colorMap: Record<string, string> = {
+    variable: '#f97316', // orange-500
+    fixed: '#3b82f6',    // blue-500
+    spent: color,
+    remaining: '#e5e7eb', // gray-200
+  };
 
   const isLarge = size === 'lg';
   const chartSize = isLarge ? 200 : 140;
@@ -51,14 +74,9 @@ export default function DonutChart({ spent, total, label, size = 'sm' }: Props) 
               dataKey="value"
               stroke="none"
             >
-              {overBudget ? (
-                <Cell fill={color} />
-              ) : (
-                <>
-                  <Cell fill={color} />
-                  <Cell fill="#e5e7eb" />
-                </>
-              )}
+              {data.map((d, i) => (
+                <Cell key={i} fill={overBudget && !hasBreakdown ? color : colorMap[d.type || ''] || '#e5e7eb'} />
+              ))}
             </Pie>
           </PieChart>
         </ResponsiveContainer>
@@ -78,6 +96,18 @@ export default function DonutChart({ spent, total, label, size = 'sm' }: Props) 
       <p className="text-xs text-gray-400 mt-0.5">
         €{formatCurrency(spent)} / €{formatCurrency(total)}
       </p>
+      {hasBreakdown && spent > 0 && (
+        <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-orange-500" />
+            <span className="text-[10px] text-gray-400">V: €{formatCurrency(variable || 0)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-blue-500" />
+            <span className="text-[10px] text-gray-400">F: €{formatCurrency(fixed || 0)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -101,7 +101,7 @@ export default function Transactions() {
   };
 
   const handleFilterChange = (key: keyof TransactionFilters, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value || undefined }));
+    setFilters(prev => ({ ...prev, [key]: (value === '' || value == null) ? undefined : value }));
     setCurrentPage(0);
   };
 

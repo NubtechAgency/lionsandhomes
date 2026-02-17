@@ -28,7 +28,7 @@ export default function ExpenseBarChart({ transactions }: Props) {
     const total = expenses.reduce((sum, t) => sum + Math.abs(t.amount), 0);
     const grouped: Record<string, { total: number; fixed: number; variable: number }> = {};
 
-    const sorted = [...expenses].sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = [...expenses].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     sorted.forEach(t => {
       const date = parseISO(t.date);
