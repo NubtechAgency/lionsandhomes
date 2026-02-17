@@ -1,34 +1,54 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dashboardAPI } from '../services/api';
+import { dashboardAPI, transactionAPI } from '../services/api';
 import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import DonutChart from '../components/charts/DonutChart';
 import { formatCurrency, formatPercentage } from '../lib/formatters';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
-import { Wallet, TrendingDown, BarChart3, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import type { DashboardStats } from '../types';
+import { Wallet, TrendingDown, BarChart3, AlertTriangle, CheckCircle2, Lock } from 'lucide-react';
+import type { DashboardStats, Transaction } from '../types';
 
 export default function General() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadStats();
+    loadData();
   }, []);
 
-  const loadStats = async () => {
+  const loadData = async () => {
     try {
       setIsLoading(true);
-      const data = await dashboardAPI.getStats();
-      setStats(data);
+      const [statsData, txData] = await Promise.all([
+        dashboardAPI.getStats(),
+        transactionAPI.listTransactions(undefined, 5000, 0),
+      ]);
+      setStats(statsData);
+      setTransactions(txData.transactions);
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Compute fixed expenses by category
+  const fixedByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    let total = 0;
+    transactions.forEach(t => {
+      if (t.amount < 0 && t.isFixed) {
+        const amt = Math.abs(t.amount);
+        total += amt;
+        const cat = t.expenseCategory || 'SIN_CATEGORIA';
+        map[cat] = (map[cat] || 0) + amt;
+      }
+    });
+    return { map, total };
+  }, [transactions]);
 
   return (
     <div className="min-h-screen bg-amber-50/30">
@@ -116,7 +136,7 @@ export default function General() {
             </div>
 
             {/* Presupuesto Total + Por Categoría */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               {/* Donut grande: presupuesto total */}
               <div className="bg-white rounded-xl border border-gray-100 p-6 flex flex-col items-center justify-center">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Presupuesto Total</h3>
@@ -147,6 +167,53 @@ export default function General() {
                   })}
                 </div>
               </div>
+            </div>
+
+            {/* Gastos Fijos por Categoría */}
+            <div className="bg-white rounded-xl border border-gray-100 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Lock size={18} className="text-blue-500" />
+                <h3 className="text-lg font-semibold text-gray-800">Gastos Fijos por Categoría</h3>
+                <span className="ml-auto text-sm font-bold text-blue-600">
+                  Total: €{formatCurrency(fixedByCategory.total)}
+                </span>
+              </div>
+
+              {fixedByCategory.total === 0 ? (
+                <p className="text-gray-400 text-sm py-4 text-center">No hay gastos fijos registrados</p>
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(fixedByCategory.map)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([catKey, amount]) => {
+                      const cat = EXPENSE_CATEGORIES.find(c => c.key === catKey);
+                      const pct = fixedByCategory.total > 0 ? (amount / fixedByCategory.total) * 100 : 0;
+                      return (
+                        <div key={catKey} className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-700">
+                                {cat?.label || catKey}
+                              </span>
+                              <span className="text-sm font-semibold text-gray-900">
+                                €{formatCurrency(amount)}
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-500 rounded-full transition-all"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                          <span className="text-xs text-gray-400 w-10 text-right shrink-0">
+                            {Math.round(pct)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           </>
         ) : (
