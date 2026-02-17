@@ -4,12 +4,11 @@ import { projectAPI, transactionAPI } from '../services/api';
 import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import CategoryProgressList from '../components/CategoryProgressList';
-import GaugeChart from '../components/charts/GaugeChart';
-import BudgetVsSpendingChart from '../components/charts/BudgetVsSpendingChart';
+import DonutChart from '../components/charts/DonutChart';
 import { formatCurrency, formatPercentage, formatDate } from '../lib/formatters';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { Wallet, Pencil, Trash2, Construction, AlertTriangle, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
-import type { ProjectWithStats, Transaction, CategoryStat } from '../types';
+import type { ProjectWithStats, Transaction } from '../types';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -89,18 +88,6 @@ export default function ProjectDetail() {
     }
     return t.amount;
   };
-
-  // Build categoryStats for the chart
-  const categoryStats: CategoryStat[] = Object.keys(project.categoryBudgets).map(key => {
-    const budget = (project.categoryBudgets as Record<string, number>)[key] || 0;
-    const spent = (stats as any).spendingByCategory?.[key] || 0;
-    return {
-      category: key as any,
-      budget,
-      spent,
-      percentage: budget > 0 ? (spent / budget) * 100 : 0,
-    };
-  });
 
   // Build spendingByCategory for progress list (usando importes asignados)
   const spendingByCategory: Record<string, number> = {};
@@ -269,22 +256,39 @@ export default function ProjectDetail() {
           );
         })()}
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Gauges - total + per category */}
-          <div className="bg-white rounded-xl border border-gray-100 px-5 py-3 flex flex-col items-center justify-center">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Presupuesto del Proyecto</h3>
-            <GaugeChart
-              total={project.totalBudget}
+        {/* Charts - Donut presupuesto total + por categoría */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Donut grande: presupuesto total */}
+          <div className="bg-white rounded-xl border border-gray-100 p-6 flex flex-col items-center justify-center">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Presupuesto Total</h3>
+            <DonutChart
               spent={stats.totalSpent}
+              total={project.totalBudget}
               label="Total"
+              size="lg"
             />
           </div>
 
-          {/* Bar chart */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Presupuesto vs Gasto</h3>
-            <BudgetVsSpendingChart categoryStats={categoryStats} fixedByCategory={fixedByCategory} />
+          {/* Grid de donuts por categoría */}
+          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Por Categoría</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+              {Object.keys(project.categoryBudgets)
+                .filter(key => (project.categoryBudgets as Record<string, number>)[key] > 0)
+                .map(key => {
+                  const cat = EXPENSE_CATEGORIES.find(c => c.key === key);
+                  const budget = (project.categoryBudgets as Record<string, number>)[key] || 0;
+                  const spent = spendingByCategory[key] || 0;
+                  return (
+                    <DonutChart
+                      key={key}
+                      spent={spent}
+                      total={budget}
+                      label={cat?.label || key}
+                    />
+                  );
+                })}
+            </div>
           </div>
         </div>
 

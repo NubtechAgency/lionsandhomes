@@ -29,21 +29,19 @@ export const listProjects = async (req: Request, res: Response): Promise<void> =
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: {
-          select: { allocations: true }
-        },
         allocations: {
-          where: { amount: { lt: 0 }, transaction: { isArchived: false } },
+          where: { transaction: { isArchived: false } },
           select: { amount: true }
         }
       }
     });
 
-    // Parsear categoryBudgets y calcular totalSpent desde allocations
+    // Parsear categoryBudgets y calcular totalSpent desde allocations (solo gastos)
     const projectsWithStats = projects.map(({ allocations, ...project }) => ({
       ...project,
       categoryBudgets: JSON.parse(project.categoryBudgets),
-      totalSpent: allocations.reduce((sum, a) => sum + Math.abs(a.amount), 0),
+      totalSpent: allocations.filter(a => a.amount < 0).reduce((sum, a) => sum + Math.abs(a.amount), 0),
+      _count: { transactions: allocations.length },
     }));
 
     res.json({
