@@ -30,7 +30,7 @@ export default function Projects() {
         projectAPI.listProjects(status),
         dashboardAPI.getStats(),
       ]);
-      setProjects(projectsRes.projects);
+      setProjects(projectsRes.projects.filter(p => p.name !== 'General'));
       setStats(statsRes);
     } catch (err) {
       setError('Error al cargar los proyectos');

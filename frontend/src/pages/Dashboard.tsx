@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { dashboardAPI, projectAPI, transactionAPI } from '../services/api';
@@ -6,9 +6,8 @@ import type { DashboardStats, Project, Transaction } from '../types';
 import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import ExpenseBarChart from '../components/charts/ExpenseBarChart';
-import BudgetVsSpendingChart from '../components/charts/BudgetVsSpendingChart';
 import { formatCurrency } from '../lib/formatters';
-import { FolderOpen, TrendingDown, FileText, FolderX } from 'lucide-react';
+import { FolderOpen, FileText, FolderX, Lock, Repeat } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -20,6 +19,26 @@ export default function Dashboard() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filter out "General" from project listings
+  const displayProjects = useMemo(
+    () => projects.filter(p => p.name !== 'General'),
+    [projects]
+  );
+
+  // Compute fixed/variable totals from transactions
+  const { totalFixed, totalVariable } = useMemo(() => {
+    let fixed = 0;
+    let variable = 0;
+    allTransactions.forEach(t => {
+      if (t.amount < 0) {
+        const amt = Math.abs(t.amount);
+        if (t.isFixed) fixed += amt;
+        else variable += amt;
+      }
+    });
+    return { totalFixed: fixed, totalVariable: variable };
+  }, [allTransactions]);
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -80,7 +99,7 @@ export default function Dashboard() {
             className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
             <option value="">Todos los proyectos</option>
-            {projects.map(p => (
+            {displayProjects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
@@ -97,23 +116,15 @@ export default function Dashboard() {
         ) : stats && (
           <>
             {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <KPICard
                 title="Proyectos Activos"
-                value={stats.kpis.totalActiveProjects}
+                value={displayProjects.length}
                 subtitle="En progreso"
                 icon={FolderOpen}
                 color="amber"
                 tooltip="Proyectos con estado 'Activo'. Haz click para verlos."
                 onClick={() => navigate('/projects')}
-              />
-              <KPICard
-                title="Gastado Total"
-                value={`€${formatCurrency(stats.kpis.totalSpent)}`}
-                subtitle="Suma de todos los gastos"
-                icon={TrendingDown}
-                color={stats.kpis.totalSpent > 0 ? 'red' : 'green'}
-                tooltip="Suma total de todos los gastos registrados en el sistema"
               />
               <KPICard
                 title="Sin Factura"
@@ -135,15 +146,29 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <div className="bg-white rounded-xl border border-gray-100 p-5">
+            {/* Charts row + Gastos Fijos/Variables KPIs */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5">
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Evolución de Gastos</h3>
                 <ExpenseBarChart transactions={allTransactions} />
               </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Presupuesto vs Gasto</h3>
-                <BudgetVsSpendingChart categoryStats={stats.categoryStats} />
+              <div className="flex flex-col gap-4">
+                <KPICard
+                  title="Gastos Fijos"
+                  value={`€${formatCurrency(totalFixed)}`}
+                  subtitle="Total acumulado"
+                  icon={Lock}
+                  color="blue"
+                  tooltip="Suma de todos los gastos marcados como fijos"
+                />
+                <KPICard
+                  title="Gastos Variables"
+                  value={`€${formatCurrency(totalVariable)}`}
+                  subtitle="Total acumulado"
+                  icon={Repeat}
+                  color="amber"
+                  tooltip="Suma de todos los gastos marcados como variables"
+                />
               </div>
             </div>
 
@@ -159,13 +184,13 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {projects.length === 0 ? (
+              {displayProjects.length === 0 ? (
                 <div className="p-8 text-center text-gray-400">
                   No hay proyectos activos
                 </div>
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {projects.map(p => {
+                  {displayProjects.map(p => {
                     const spent = p.totalSpent || 0;
                     const remaining = p.totalBudget - spent;
                     const pct = p.totalBudget > 0 ? (spent / p.totalBudget) * 100 : 0;

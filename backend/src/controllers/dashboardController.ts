@@ -20,9 +20,9 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
     // 1. KPIs GLOBALES
     // ========================================
 
-    // Total de proyectos activos
+    // Total de proyectos activos (excluye "General" que no es proyecto independiente)
     const totalActiveProjects = await prisma.project.count({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', name: { not: 'General' } },
     });
 
     // Calcular el rango del mes actual
@@ -74,10 +74,11 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
     // 2. PRESUPUESTO VS GASTO (por categoría)
     // ========================================
 
-    // Obtener proyectos activos (o uno específico)
+    // Obtener proyectos activos (o uno específico), excluye "General"
     const projects = await prisma.project.findMany({
       where: {
         status: 'ACTIVE',
+        name: { not: 'General' },
         ...(projectId && { id: projectId }),
       },
       select: {

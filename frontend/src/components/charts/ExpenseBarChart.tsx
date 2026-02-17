@@ -26,38 +26,41 @@ export default function ExpenseBarChart({ transactions }: Props) {
     if (expenses.length === 0) return { data: [], totalSpent: 0 };
 
     const total = expenses.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    const grouped: Record<string, { total: number; fixed: number; variable: number }> = {};
+    const grouped: Record<string, { total: number; fixed: number; variable: number; name: string }> = {};
 
-    const sorted = [...expenses].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    sorted.forEach(t => {
+    expenses.forEach(t => {
       const date = parseISO(t.date);
-      let key: string;
+      let sortKey: string;
+      let displayName: string;
 
       switch (filter) {
         case 'day':
-          key = format(date, 'dd MMM', { locale: es });
+          sortKey = format(date, 'yyyy-MM-dd');
+          displayName = format(date, 'dd MMM', { locale: es });
           break;
         case 'week': {
           const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-          key = format(weekStart, "'Sem' w", { locale: es });
+          sortKey = format(weekStart, 'yyyy-MM-dd');
+          displayName = format(weekStart, "'Sem' w", { locale: es });
           break;
         }
         case 'month':
-          key = format(date, 'MMM yy', { locale: es });
+          sortKey = format(date, 'yyyy-MM');
+          displayName = format(date, 'MMM yy', { locale: es });
           break;
       }
 
-      if (!grouped[key]) grouped[key] = { total: 0, fixed: 0, variable: 0 };
+      if (!grouped[sortKey]) grouped[sortKey] = { total: 0, fixed: 0, variable: 0, name: displayName };
       const amt = Math.abs(t.amount);
-      grouped[key].total += amt;
-      if (t.isFixed) grouped[key].fixed += amt;
-      else grouped[key].variable += amt;
+      grouped[sortKey].total += amt;
+      if (t.isFixed) grouped[sortKey].fixed += amt;
+      else grouped[sortKey].variable += amt;
     });
 
     const entries = Object.entries(grouped)
-      .map(([name, v]) => ({
-        name,
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => ({
+        name: v.name,
         total: Math.round(v.total * 100) / 100,
         variable: Math.round(v.variable * 100) / 100,
         fixed: Math.round(v.fixed * 100) / 100,
