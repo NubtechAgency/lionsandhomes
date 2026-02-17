@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-import { EXPENSE_CATEGORIES } from './projectController';
+import { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES } from './projectController';
 
 /**
  * GET /api/dashboard/stats
@@ -50,12 +50,13 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
       totalSpentThisMonth = Math.abs(result._sum.amount || 0);
     }
 
-    // Total de transacciones sin factura
+    // Total de transacciones sin factura (excluye categorías exentas: SUELDOS, PRESTAMOS)
     const totalWithoutInvoice = await prisma.transaction.count({
       where: {
         hasInvoice: false,
         amount: { lt: 0 },
         isArchived: false,
+        expenseCategory: { notIn: [...INVOICE_EXEMPT_CATEGORIES] },
         ...(projectId && { allocations: { some: { projectId } } }),
       },
     });

@@ -4,14 +4,20 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Categorías de gasto de Lions (4 para proyectos + 1 global)
+// Categorías de gasto de Lions
 export const EXPENSE_CATEGORIES = [
   'MATERIAL_Y_MANO_DE_OBRA',
   'DECORACION',
   'COMPRA_Y_GASTOS',
   'OTROS',
+  'GASTOS_PISOS',
   'BUROCRACIA',
+  'SUELDOS',
+  'PRESTAMOS',
 ] as const;
+
+// Categorías exentas de factura (no cuentan en "sin factura")
+export const INVOICE_EXEMPT_CATEGORIES = ['SUELDOS', 'PRESTAMOS'] as const;
 
 /**
  * GET /api/projects
@@ -100,7 +106,9 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
 
     // Calcular estadísticas desde allocations
     const totalSpent = project.allocations.reduce((sum, a) => sum + Math.abs(a.amount), 0);
-    const transactionsWithoutInvoice = project.allocations.filter(a => !a.transaction.hasInvoice).length;
+    const transactionsWithoutInvoice = project.allocations.filter(
+      a => !a.transaction.hasInvoice && !INVOICE_EXEMPT_CATEGORIES.includes(a.transaction.expenseCategory as any)
+    ).length;
 
     // Parsear categoryBudgets
     const categoryBudgets = JSON.parse(project.categoryBudgets);

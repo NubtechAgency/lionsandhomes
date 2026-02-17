@@ -117,11 +117,36 @@ async function seedDefaultUser() {
   }
 }
 
+// Seed: crear proyecto "General" si no existe
+async function seedGeneralProject() {
+  try {
+    const existing = await prisma.project.findFirst({
+      where: { name: 'General' },
+    });
+    if (!existing) {
+      await prisma.project.create({
+        data: {
+          name: 'General',
+          description: 'Gastos generales no asignados a un proyecto específico (sueldos, préstamos...)',
+          status: 'ACTIVE',
+          totalBudget: 0,
+          categoryBudgets: JSON.stringify({}),
+          startDate: new Date(),
+        },
+      });
+      console.log('✅ Proyecto "General" creado');
+    }
+  } catch (error) {
+    console.error('Error al crear proyecto General:', error);
+  }
+}
+
 app.listen(PORT, async () => {
   console.log(`🚀 Servidor Lions corriendo en http://localhost:${PORT}`);
   console.log(`📊 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   await seedDefaultUser();
+  await seedGeneralProject();
 });
 
 export default app;

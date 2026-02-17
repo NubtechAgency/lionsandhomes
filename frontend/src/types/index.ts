@@ -33,13 +33,16 @@ export interface ApiError {
 // TIPOS DE PROYECTOS
 // ========================================
 
-// Categorías de gasto de Lions (4 proyecto + 1 global)
+// Categorías de gasto de Lions
 export type ExpenseCategory =
   | 'MATERIAL_Y_MANO_DE_OBRA'
   | 'DECORACION'
   | 'COMPRA_Y_GASTOS'
   | 'OTROS'
-  | 'BUROCRACIA';
+  | 'GASTOS_PISOS'
+  | 'BUROCRACIA'
+  | 'SUELDOS'
+  | 'PRESTAMOS';
 
 // Estados de un proyecto
 export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';

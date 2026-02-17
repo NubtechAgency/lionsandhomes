@@ -1,7 +1,6 @@
 import type { ExpenseCategory } from '../types';
 
 // Categorías de gasto de Lions - FUENTE ÚNICA
-// 4 categorías para proyectos + 1 global (BUROCRACIA)
 export const EXPENSE_CATEGORIES: {
   key: ExpenseCategory;
   label: string;
@@ -28,11 +27,31 @@ export const EXPENSE_CATEGORIES: {
     description: '',
   },
   {
+    key: 'GASTOS_PISOS',
+    label: 'Gastos pisos',
+    description: 'Luz, agua, comunidad, basura...',
+  },
+  {
     key: 'BUROCRACIA',
     label: 'Burocracia',
     description: 'Abogados, impuestos...',
   },
+  {
+    key: 'SUELDOS',
+    label: 'Sueldos',
+    description: 'Nóminas y salarios',
+  },
+  {
+    key: 'PRESTAMOS',
+    label: 'Préstamos',
+    description: 'Transferencias de Lions a Jorge',
+  },
 ];
 
-// Solo las categorías de proyecto (sin BUROCRACIA)
-export const PROJECT_CATEGORIES = EXPENSE_CATEGORIES.filter(c => c.key !== 'BUROCRACIA');
+// Categorías para presupuestos de proyecto (sin globales: BUROCRACIA, SUELDOS, PRESTAMOS)
+export const PROJECT_CATEGORIES = EXPENSE_CATEGORIES.filter(
+  c => !['BUROCRACIA', 'SUELDOS', 'PRESTAMOS'].includes(c.key)
+);
+
+// Categorías exentas de factura (no cuentan en "sin factura")
+export const INVOICE_EXEMPT_CATEGORIES: ExpenseCategory[] = ['SUELDOS', 'PRESTAMOS'];

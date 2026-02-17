@@ -1,7 +1,7 @@
 // 💰 Controlador de gestión de transacciones
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { EXPENSE_CATEGORIES } from './projectController';
+import { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES } from './projectController';
 
 const prisma = new PrismaClient();
 
@@ -272,7 +272,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
     const [total, totalExpensesAgg, withoutInvoiceCount, unassignedCount] = await Promise.all([
       prisma.transaction.count({ where }),
       prisma.transaction.aggregate({ where: expensesOnly, _sum: { amount: true } }),
-      prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false } }),
+      prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false, expenseCategory: { notIn: [...INVOICE_EXEMPT_CATEGORIES] } } }),
       prisma.transaction.count({ where: { ...expensesOnly, allocations: { none: {} } } }),
     ]);
 
