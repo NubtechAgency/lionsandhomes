@@ -5,7 +5,8 @@ import {
   listTransactions,
   getTransaction,
   updateTransaction,
-  archiveTransaction
+  archiveTransaction,
+  checkDuplicates,
 } from '../controllers/transactionController';
 import { authMiddleware } from '../middleware/auth';
 
@@ -27,6 +28,12 @@ router.post('/', createTransaction);
  * Query params: projectId, expenseCategory, hasInvoice, dateFrom, dateTo, isManual, search, limit, offset
  */
 router.get('/', listTransactions);
+
+/**
+ * GET /api/transactions/check-duplicates
+ * Comprobar si hay transacciones duplicadas
+ */
+router.get('/check-duplicates', checkDuplicates);
 
 /**
  * GET /api/transactions/:id

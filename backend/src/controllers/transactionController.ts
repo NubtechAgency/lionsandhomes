@@ -604,3 +604,92 @@ export const archiveTransaction = async (req: Request, res: Response): Promise<v
     });
   }
 };
+
+/**
+ * GET /api/transactions/check-duplicates
+ * Comprobar si hay transacciones duplicadas en la base de datos
+ */
+export const checkDuplicates = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const allTx = await prisma.transaction.findMany({
+      where: { isArchived: false },
+      select: { id: true, date: true, amount: true, concept: true, externalId: true, isManual: true },
+      orderBy: { date: 'desc' },
+    });
+
+    // 1. Duplicados por externalId
+    const extIdMap: Record<string, number[]> = {};
+    allTx.forEach(t => {
+      if (t.externalId) {
+        if (!extIdMap[t.externalId]) extIdMap[t.externalId] = [];
+        extIdMap[t.externalId].push(t.id);
+      }
+    });
+    const externalIdDuplicates = Object.entries(extIdMap)
+      .filter(([, ids]) => ids.length > 1)
+      .map(([externalId, ids]) => ({ externalId, count: ids.length, ids }));
+
+    // 2. Misma fecha + importe
+    const dateAmountMap: Record<string, typeof allTx> = {};
+    allTx.forEach(t => {
+      const key = `${new Date(t.date).toISOString().slice(0, 10)}|${t.amount}`;
+      if (!dateAmountMap[key]) dateAmountMap[key] = [];
+      dateAmountMap[key].push(t);
+    });
+    const dateAmountDuplicates = Object.entries(dateAmountMap)
+      .filter(([, txs]) => txs.length > 1)
+      .map(([key, txs]) => {
+        const [date, amount] = key.split('|');
+        return {
+          date,
+          amount: parseFloat(amount),
+          count: txs.length,
+          transactions: txs.map(t => ({
+            id: t.id,
+            concept: t.concept,
+            externalId: t.externalId,
+            isManual: t.isManual,
+          })),
+        };
+      });
+
+    // 3. Duplicados exactos: fecha + importe + concepto
+    const exactMap: Record<string, typeof allTx> = {};
+    allTx.forEach(t => {
+      const key = `${new Date(t.date).toISOString().slice(0, 10)}|${t.amount}|${t.concept.trim().toLowerCase()}`;
+      if (!exactMap[key]) exactMap[key] = [];
+      exactMap[key].push(t);
+    });
+    const exactDuplicates = Object.entries(exactMap)
+      .filter(([, txs]) => txs.length > 1)
+      .map(([, txs]) => ({
+        date: new Date(txs[0].date).toISOString().slice(0, 10),
+        amount: txs[0].amount,
+        concept: txs[0].concept,
+        count: txs.length,
+        ids: txs.map(t => t.id),
+      }));
+
+    res.json({
+      total: allTx.length,
+      externalIdDuplicates: {
+        count: externalIdDuplicates.length,
+        items: externalIdDuplicates,
+      },
+      dateAmountDuplicates: {
+        count: dateAmountDuplicates.length,
+        items: dateAmountDuplicates,
+      },
+      exactDuplicates: {
+        count: exactDuplicates.length,
+        items: exactDuplicates,
+      },
+    });
+  } catch (error) {
+    console.error('Error en checkDuplicates:', error);
+    res.status(500).json({
+      error: 'Error del servidor',
+      message: 'Error al comprobar duplicados',
+    });
+  }
+};
