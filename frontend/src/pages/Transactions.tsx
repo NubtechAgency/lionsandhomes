@@ -479,6 +479,16 @@ export default function Transactions() {
               />
             )}
             <select
+              value={filters.isManual === undefined ? '' : filters.isManual.toString()}
+              onChange={e => handleFilterChange('isManual', e.target.value === '' ? undefined : e.target.value === 'true')}
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="">Todas (origen)</option>
+              <option value="false">Bancarias</option>
+              <option value="true">Manuales</option>
+            </select>
+
+            <select
               value={filters.sortBy && filters.sortOrder ? `${filters.sortBy}-${filters.sortOrder}` : ''}
               onChange={e => {
                 const val = e.target.value;
