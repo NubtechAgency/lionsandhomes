@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import { logAudit, getClientIp } from '../services/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -37,6 +38,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (!user) {
+      await logAudit({ action: 'LOGIN_FAILED', entityType: 'User', details: { email }, ipAddress: getClientIp(req) });
       res.status(401).json({
         error: 'Credenciales inválidas',
         message: 'Email o contraseña incorrectos'
@@ -48,6 +50,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {
+      await logAudit({ action: 'LOGIN_FAILED', entityType: 'User', userId: user.id, details: { email }, ipAddress: getClientIp(req) });
       res.status(401).json({
         error: 'Credenciales inválidas',
         message: 'Email o contraseña incorrectos'
@@ -57,6 +60,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Generar token JWT
     const token = generateToken(user.id, user.email);
+
+    await logAudit({ action: 'LOGIN', entityType: 'User', entityId: user.id, userId: user.id, ipAddress: getClientIp(req) });
 
     // Responder con los datos del usuario y el token
     res.json({

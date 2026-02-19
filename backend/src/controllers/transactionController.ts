@@ -1,7 +1,8 @@
-// 💰 Controlador de gestión de transacciones
+// Controlador de gestión de transacciones
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { INVOICE_EXEMPT_CATEGORIES } from './projectController';
+import { logAudit, getClientIp } from '../services/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -109,6 +110,8 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
         invoices: true,
       },
     });
+
+    await logAudit({ action: 'CREATE', entityType: 'Transaction', entityId: transaction.id, userId: req.userId, details: { amount, concept }, ipAddress: getClientIp(req) });
 
     res.status(201).json({
       message: 'Transacción manual creada exitosamente',
@@ -485,6 +488,8 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       syncedCount = result.count;
     }
 
+    await logAudit({ action: 'UPDATE', entityType: 'Transaction', entityId: transactionId, userId: req.userId, details: updateData, ipAddress: getClientIp(req) });
+
     res.json({
       message: syncedCount > 0
         ? `Transacción actualizada y ${syncedCount} más con el mismo concepto`
@@ -530,6 +535,8 @@ export const archiveTransaction = async (req: Request, res: Response): Promise<v
         project: { select: { id: true, name: true } }
       }
     });
+
+    await logAudit({ action: updated.isArchived ? 'ARCHIVE' : 'UNARCHIVE', entityType: 'Transaction', entityId: transactionId, userId: req.userId, ipAddress: getClientIp(req) });
 
     res.json({
       message: updated.isArchived ? 'Transacción archivada' : 'Transacción desarchivada',

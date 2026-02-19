@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES } from '../lib/constants';
+import { logAudit, getClientIp } from '../services/auditLog';
 
 // Re-export para que otros controllers puedan seguir importando desde aquí
 export { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES };
@@ -141,6 +142,8 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
       }
     });
 
+    await logAudit({ action: 'CREATE', entityType: 'Project', entityId: project.id, userId: req.userId, details: { name }, ipAddress: getClientIp(req) });
+
     res.status(201).json({
       message: 'Proyecto creado exitosamente',
       project: {
@@ -200,6 +203,8 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
       data: updateData
     });
 
+    await logAudit({ action: 'UPDATE', entityType: 'Project', entityId: projectId, userId: req.userId, ipAddress: getClientIp(req) });
+
     res.json({
       message: 'Proyecto actualizado exitosamente',
       project: {
@@ -255,6 +260,8 @@ export const deleteProject = async (req: Request, res: Response): Promise<void> 
     await prisma.project.delete({
       where: { id: projectId }
     });
+
+    await logAudit({ action: 'DELETE', entityType: 'Project', entityId: projectId, userId: req.userId, details: { name: existingProject.name }, ipAddress: getClientIp(req) });
 
     res.json({
       message: 'Proyecto eliminado exitosamente'

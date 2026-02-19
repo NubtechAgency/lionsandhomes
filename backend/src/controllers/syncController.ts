@@ -1,6 +1,7 @@
 // 🔄 Controlador de sincronización con n8n/Google Sheets
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { logAudit, getClientIp } from '../services/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -89,7 +90,9 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
       }
     }
 
-    // 📊 REPORTE FINAL
+    await logAudit({ action: 'SYNC', entityType: 'Transaction', details: { total: transactions.length, created, updated, skipped }, ipAddress: getClientIp(req) });
+
+    // REPORTE FINAL
     res.status(200).json({
       message: 'Sincronización completada',
       stats: {

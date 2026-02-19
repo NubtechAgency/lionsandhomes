@@ -109,5 +109,21 @@ model TransactionProject {
   @@index([projectId])
 }
 
+// Registro de auditoría (quién hizo qué)
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  action     String   // LOGIN, LOGIN_FAILED, LOGOUT, CREATE, UPDATE, DELETE, ARCHIVE, UPLOAD, SYNC
+  entityType String?  // Transaction, Project, Invoice, User
+  entityId   Int?
+  userId     Int?
+  details    String?  // JSON string con contexto adicional
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([action])
+  @@index([userId])
+  @@index([createdAt])
+}
+
 // Categorias de gasto de Lions
 // Valores posibles: MATERIAL_Y_MANO_DE_OBRA, DECORACION, COMPRA_Y_GASTOS, OTROS, GASTOS_PISOS, BUROCRACIA, SUELDOS, PRESTAMOS

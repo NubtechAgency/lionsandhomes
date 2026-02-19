@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { generateDownloadUrl, generateInvoiceKey, deleteFile, uploadFileToR2 } from '../services/cloudflare-r2';
+import { logAudit, getClientIp } from '../services/auditLog';
 
 const prisma = new PrismaClient();
 
@@ -88,6 +89,8 @@ export async function uploadInvoice(req: Request, res: Response): Promise<void> 
       }
       throw dbError;
     }
+
+    await logAudit({ action: 'UPLOAD', entityType: 'Invoice', entityId: txId, userId: req.userId, details: { fileName: file.originalname }, ipAddress: getClientIp(req) });
 
     res.json({
       message: 'Factura subida exitosamente',
@@ -207,6 +210,8 @@ export async function deleteInvoice(req: Request, res: Response): Promise<void> 
     } catch (r2Error) {
       console.error('Archivo huérfano en R2 (DB ya limpia):', invoice.url, r2Error);
     }
+
+    await logAudit({ action: 'DELETE', entityType: 'Invoice', entityId: invoiceId, userId: req.userId, details: { fileName: invoice.fileName, transactionId: invoice.transactionId }, ipAddress: getClientIp(req) });
 
     res.json({
       message: 'Factura eliminada exitosamente',
