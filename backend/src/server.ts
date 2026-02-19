@@ -20,6 +20,15 @@ dotenv.config();
 
 const prisma = new PrismaClient();
 
+// Validar variables de entorno requeridas al arrancar
+const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`ERROR: Variable de entorno ${key} no está configurada. Abortando.`);
+    process.exit(1);
+  }
+}
+
 const app: Application = express();
 const PORT = process.env.PORT || 8000;
 

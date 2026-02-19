@@ -63,49 +63,45 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
         // ✅ Validar campos obligatorios
         if (!txn.externalId || !txn.date || txn.amount === undefined || !txn.concept) {
           skipped++;
-          errors.push(`Transacción con datos incompletos: ${JSON.stringify(txn)}`);
+          errors.push(`Transacción con datos incompletos (externalId: ${txn.externalId || 'missing'})`);
           continue;
         }
 
-        // 🔍 Verificar si la transacción ya existe en la BD
+        // 🔄 Upsert atómico: crea si no existe, actualiza si ya existe
+        // NO sobrescribe asignaciones manuales (projectId, expenseCategory, notes, etc.)
         const existingTransaction = await prisma.transaction.findUnique({
           where: { externalId: txn.externalId },
+          select: { id: true },
+        });
+
+        await prisma.transaction.upsert({
+          where: { externalId: txn.externalId },
+          update: {
+            date: new Date(txn.date),
+            amount: txn.amount,
+            concept: txn.concept,
+            category: txn.category,
+          },
+          create: {
+            externalId: txn.externalId,
+            date: new Date(txn.date),
+            amount: txn.amount,
+            concept: txn.concept,
+            category: txn.category,
+            isManual: false,
+          },
         });
 
         if (existingTransaction) {
-          // ✏️ YA EXISTE - Actualizar solo campos básicos (NO sobrescribir asignaciones manuales)
-          await prisma.transaction.update({
-            where: { externalId: txn.externalId },
-            data: {
-              // Solo actualizamos estos campos básicos
-              date: new Date(txn.date),
-              amount: txn.amount,
-              concept: txn.concept,
-              category: txn.category,
-              // NO tocamos: projectId, expenseCategory, notes, hasInvoice, invoiceUrl, invoiceFileName
-            },
-          });
           updated++;
         } else {
-          // ➕ NO EXISTE - Crear nueva transacción
-          await prisma.transaction.create({
-            data: {
-              externalId: txn.externalId,
-              date: new Date(txn.date),
-              amount: txn.amount,
-              concept: txn.concept,
-              category: txn.category,
-              isManual: false,  // Las transacciones sincronizadas NO son manuales
-              // Los campos de asignación manual quedan NULL por defecto
-            },
-          });
           created++;
         }
       } catch (error: any) {
         // Si falla una transacción individual, no paramos todo el proceso
         skipped++;
-        errors.push(`Error en transacción ${txn.externalId}: ${error.message}`);
-        console.error('Error procesando transacción:', error);
+        errors.push(`Error en transacción ${txn.externalId}`);
+        console.error('Error procesando transacción:', txn.externalId, error.message);
       }
     }
 

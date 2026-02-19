@@ -1,6 +1,6 @@
 // Context de autenticación para manejar el estado del usuario
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { User, LoginCredentials, RegisterData } from '../types';
+import type { User, LoginCredentials } from '../types';
 import { authAPI } from '../services/api';
 
 interface AuthContextType {
@@ -8,7 +8,6 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
-  register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -73,23 +72,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   /**
-   * Registrar nuevo usuario
-   */
-  const register = async (data: RegisterData) => {
-    try {
-      const response = await authAPI.register(data);
-
-      // Guardar token y usuario
-      localStorage.setItem('token', response.token);
-      setToken(response.token);
-      setUser(response.user);
-    } catch (error) {
-      console.error('Error en register:', error);
-      throw error;
-    }
-  };
-
-  /**
    * Cerrar sesión
    */
   const logout = () => {
@@ -103,7 +85,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     token,
     loading,
     login,
-    register,
     logout,
     isAuthenticated: !!user && !!token,
   };

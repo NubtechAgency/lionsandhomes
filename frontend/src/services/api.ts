@@ -1,7 +1,6 @@
 // Cliente HTTP centralizado para llamadas a la API
 import type {
   LoginCredentials,
-  RegisterData,
   AuthResponse,
   User,
   Project,
@@ -59,16 +58,6 @@ export const authAPI = {
     return fetchAPI<AuthResponse>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
-    });
-  },
-
-  /**
-   * Registrar nuevo usuario
-   */
-  register: async (data: RegisterData): Promise<AuthResponse> => {
-    return fetchAPI<AuthResponse>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
     });
   },
 

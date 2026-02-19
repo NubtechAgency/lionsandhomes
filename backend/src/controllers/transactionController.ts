@@ -257,8 +257,8 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
         : sortBy === 'concept'
         ? { concept: sortOrder === 'asc' ? 'asc' : 'desc' }
         : { date: sortOrder === 'asc' ? 'asc' : 'desc' },
-      take: parseInt(limit as string),
-      skip: parseInt(offset as string)
+      take: Math.min(parseInt(limit as string) || 50, 1000),
+      skip: Math.max(parseInt(offset as string) || 0, 0)
     });
 
     // Contar total para paginación + stats agregados (solo gastos para KPIs)
@@ -474,15 +474,17 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
           });
           return;
         }
-        // Reemplazar allocations: borrar existentes, crear nuevas
-        await prisma.transactionProject.deleteMany({ where: { transactionId } });
-        await prisma.transactionProject.createMany({
-          data: bodyAllocations.map((a: any) => ({
-            transactionId,
-            projectId: a.projectId,
-            amount: a.amount,
-          })),
-        });
+        // Reemplazar allocations atómicamente: borrar existentes + crear nuevas
+        await prisma.$transaction([
+          prisma.transactionProject.deleteMany({ where: { transactionId } }),
+          prisma.transactionProject.createMany({
+            data: bodyAllocations.map((a: any) => ({
+              transactionId,
+              projectId: a.projectId,
+              amount: a.amount,
+            })),
+          }),
+        ]);
         // Denormalize: projectId = primer allocation
         updateData.projectId = bodyAllocations[0].projectId;
       } else {

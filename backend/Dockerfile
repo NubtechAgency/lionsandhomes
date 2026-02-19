@@ -49,6 +49,10 @@ COPY --from=builder /app/dist ./dist
 # Copiar node_modules con Prisma Client generado
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
+# Crear usuario non-root
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+USER nodejs
+
 # Exponer puerto
 EXPOSE 8000
 
