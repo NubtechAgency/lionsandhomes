@@ -1,6 +1,8 @@
 // Servidor principal - Express + TypeScript
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
@@ -25,6 +27,9 @@ const PORT = process.env.PORT || 8000;
 // MIDDLEWARES GLOBALES
 // ========================================
 
+// Security headers (helmet)
+app.use(helmet());
+
 // CORS - permitir peticiones desde el frontend
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
@@ -33,11 +38,30 @@ app.use(cors({
   credentials: true
 }));
 
-// Parser de JSON
-app.use(express.json());
+// Rate limiting global (100 req/15min por IP)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas peticiones, intenta de nuevo más tarde' },
+});
+app.use(globalLimiter);
 
-// Parser de URL-encoded
-app.use(express.urlencoded({ extended: true }));
+// Rate limiting estricto para login (5 intentos/15min por IP)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiados intentos de login, intenta de nuevo en 15 minutos' },
+});
+
+// Parser de JSON con límite de tamaño
+app.use(express.json({ limit: '1mb' }));
+
+// Parser de URL-encoded con límite de tamaño
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ========================================
 // RUTAS
@@ -61,7 +85,8 @@ app.get('/', (_req: Request, res: Response) => {
   });
 });
 
-// Usar rutas de la API
+// Usar rutas de la API (login con rate limit estricto)
+app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/sync', syncRoutes);
@@ -97,23 +122,39 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // INICIAR SERVIDOR
 // ========================================
 
-// Seed: crear usuario por defecto si no existe
+// Seed: crear usuario por defecto si no existe, o actualizar password si SEED_USER_PASSWORD está definida
 async function seedDefaultUser() {
   try {
+    const seedEmail = process.env.SEED_USER_EMAIL;
+    const seedPassword = process.env.SEED_USER_PASSWORD;
+    const seedName = process.env.SEED_USER_NAME || 'Admin';
+
+    if (!seedEmail || !seedPassword) {
+      return;
+    }
+
     const existing = await prisma.user.findFirst();
     if (!existing) {
-      const hashedPassword = await bcrypt.hash('***REMOVED***', 10);
+      // Crear usuario nuevo
+      const hashedPassword = await bcrypt.hash(seedPassword, 10);
       await prisma.user.create({
-        data: {
-          email: 'lions',
-          password: hashedPassword,
-          name: 'Lions Admin'
-        }
+        data: { email: seedEmail, password: hashedPassword, name: seedName }
       });
-      console.log('✅ Usuario por defecto creado: lions');
+      console.log('✅ Usuario por defecto creado');
+    } else {
+      // Actualizar password del usuario existente si ha cambiado
+      const isSamePassword = await bcrypt.compare(seedPassword, existing.password);
+      if (!isSamePassword) {
+        const hashedPassword = await bcrypt.hash(seedPassword, 10);
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { password: hashedPassword }
+        });
+        console.log('✅ Password del usuario actualizada');
+      }
     }
   } catch (error) {
-    console.error('Error al crear usuario por defecto:', error);
+    console.error('Error al gestionar usuario por defecto:', error);
   }
 }
 

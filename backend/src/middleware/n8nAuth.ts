@@ -1,5 +1,6 @@
 // 🔐 Middleware de autenticación para n8n
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 
 /**
  * Middleware para verificar que las peticiones vienen desde n8n
@@ -36,8 +37,10 @@ export const n8nAuthMiddleware = (req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    // 🔍 Verificar que el token coincide
-    if (incomingToken !== expectedToken) {
+    // 🔍 Verificar que el token coincide (timing-safe para prevenir timing attacks)
+    const expected = Buffer.from(expectedToken, 'utf8');
+    const incoming = Buffer.from(incomingToken, 'utf8');
+    if (expected.length !== incoming.length || !crypto.timingSafeEqual(expected, incoming)) {
       res.status(403).json({
         error: 'Forbidden',
         message: 'Token de autenticación inválido',

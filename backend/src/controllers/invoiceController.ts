@@ -22,6 +22,16 @@ export async function uploadInvoice(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    // Validación de tipo de archivo (defensa en profundidad — multer ya filtra)
+    const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      res.status(400).json({
+        error: 'Tipo de archivo no permitido',
+        message: 'Solo se permiten archivos PDF, JPG, PNG y WebP',
+      });
+      return;
+    }
+
     const txId = parseInt(transactionId);
     if (isNaN(txId)) {
       res.status(400).json({
