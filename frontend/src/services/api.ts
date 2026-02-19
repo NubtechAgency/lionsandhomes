@@ -1,4 +1,4 @@
-// Cliente HTTP centralizado para llamadas a la API
+// Cliente HTTP centralizado para llamadas a la API (httpOnly cookies)
 import type {
   LoginCredentials,
   AuthResponse,
@@ -16,27 +16,63 @@ import type {
   DashboardStats,
 } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// En dev usa Vite proxy (mismo origen), en prod usa VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL || '';
+
+// Singleton para deduplicar refreshes concurrentes
+let refreshPromise: Promise<boolean> | null = null;
+
+async function attemptRefresh(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 /**
- * Función auxiliar para hacer peticiones HTTP
+ * Función auxiliar para hacer peticiones HTTP con httpOnly cookies
  */
 async function fetchAPI<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = localStorage.getItem('token');
-
   const config: RequestInit = {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
   };
 
-  const response = await fetch(`${API_URL}${endpoint}`, config);
+  let response = await fetch(`${API_URL}${endpoint}`, config);
+
+  // Si 401 y no es login ni refresh, intentar refresh transparente
+  if (
+    response.status === 401 &&
+    !endpoint.includes('/auth/login') &&
+    !endpoint.includes('/auth/refresh')
+  ) {
+    // Deduplicar: si ya hay un refresh en curso, esperar a ese
+    if (!refreshPromise) {
+      refreshPromise = attemptRefresh().finally(() => { refreshPromise = null; });
+    }
+    const refreshed = await refreshPromise;
+
+    if (refreshed) {
+      // Reintentar la request original con la nueva cookie
+      response = await fetch(`${API_URL}${endpoint}`, config);
+    } else {
+      // Refresh falló — redirigir a login
+      window.location.href = '/login';
+      throw new Error('Sesión expirada');
+    }
+  }
 
   if (!response.ok) {
     const error = await response.json();
@@ -51,9 +87,6 @@ async function fetchAPI<T>(
 // ========================================
 
 export const authAPI = {
-  /**
-   * Iniciar sesión
-   */
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     return fetchAPI<AuthResponse>('/api/auth/login', {
       method: 'POST',
@@ -61,11 +94,20 @@ export const authAPI = {
     });
   },
 
-  /**
-   * Obtener usuario actual
-   */
   getCurrentUser: async (): Promise<{ user: User }> => {
     return fetchAPI<{ user: User }>('/api/auth/me');
+  },
+
+  refresh: async (): Promise<{ message: string; user: User }> => {
+    return fetchAPI<{ message: string; user: User }>('/api/auth/refresh', {
+      method: 'POST',
+    });
+  },
+
+  logout: async (): Promise<{ message: string }> => {
+    return fetchAPI<{ message: string }>('/api/auth/logout', {
+      method: 'POST',
+    });
   },
 };
 
@@ -249,12 +291,9 @@ export const invoiceAPI = {
     formData.append('file', file);
     formData.append('transactionId', transactionId.toString());
 
-    const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}/api/invoices/upload`, {
       method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
+      credentials: 'include',
       body: formData,
     });
 

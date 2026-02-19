@@ -1,6 +1,7 @@
-// Middleware de autenticación JWT
+// Middleware de autenticación JWT (lee de httpOnly cookie, fallback a Authorization header)
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { ACCESS_TOKEN_COOKIE } from '../lib/cookies';
 
 // Extender el tipo Request para incluir userId
 declare global {
@@ -17,8 +18,9 @@ interface JWTPayload {
 }
 
 /**
- * Middleware que verifica que el usuario esté autenticado
- * Extrae el token JWT del header Authorization y verifica su validez
+ * Middleware que verifica que el usuario esté autenticado.
+ * 1. Intenta leer el access_token de la cookie httpOnly
+ * 2. Fallback: lee del header Authorization: Bearer <token>
  */
 export const authMiddleware = (
   req: Request,
@@ -26,10 +28,18 @@ export const authMiddleware = (
   next: NextFunction
 ): void => {
   try {
-    // Obtener el token del header Authorization
-    const authHeader = req.headers.authorization;
+    // 1. Cookie httpOnly (método principal)
+    let token = req.cookies?.[ACCESS_TOKEN_COOKIE];
 
-    if (!authHeader) {
+    // 2. Fallback: Authorization header (compatibilidad durante migración)
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader) {
+        token = authHeader.split(' ')[1];
+      }
+    }
+
+    if (!token) {
       res.status(401).json({
         error: 'No autorizado',
         message: 'No se proporcionó token de autenticación'
@@ -37,29 +47,13 @@ export const authMiddleware = (
       return;
     }
 
-    // El formato debe ser: "Bearer TOKEN"
-    const token = authHeader.split(' ')[1];
-
-    if (!token) {
-      res.status(401).json({
-        error: 'No autorizado',
-        message: 'Formato de token inválido'
-      });
-      return;
-    }
-
-    // Verificar el token
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       throw new Error('JWT_SECRET no está configurado en las variables de entorno');
     }
 
     const decoded = jwt.verify(token, secret) as JWTPayload;
-
-    // Agregar el userId al request para que esté disponible en las rutas
     req.userId = decoded.userId;
-
-    // Continuar con la siguiente función
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {

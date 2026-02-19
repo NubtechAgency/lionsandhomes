@@ -2,6 +2,7 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
@@ -38,6 +39,9 @@ const PORT = process.env.PORT || 8000;
 
 // Security headers (helmet)
 app.use(helmet());
+
+// Cookie parser (para leer httpOnly cookies de auth)
+app.use(cookieParser());
 
 // CORS - permitir peticiones desde el frontend
 app.use(cors({
@@ -229,6 +233,20 @@ async function seedGeneralProject() {
     console.error('Error al crear proyecto General:', error);
   }
 }
+
+// Limpiar refresh tokens expirados cada hora
+setInterval(async () => {
+  try {
+    const { count } = await prisma.refreshToken.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    if (count > 0) {
+      console.log(`Limpieza: ${count} refresh tokens expirados eliminados`);
+    }
+  } catch (error) {
+    console.error('Error limpiando refresh tokens:', error);
+  }
+}, 60 * 60 * 1000);
 
 app.listen(PORT, async () => {
   console.log(`🚀 Servidor Lions corriendo en http://localhost:${PORT}`);

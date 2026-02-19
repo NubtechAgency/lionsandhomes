@@ -1,6 +1,6 @@
-// Rutas de autenticación
+// Rutas de autenticación (httpOnly cookies)
 import { Router } from 'express';
-import { login, getCurrentUser } from '../controllers/authController';
+import { login, refresh, logout, getCurrentUser } from '../controllers/authController';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { loginSchema } from '../schemas/auth.schemas';
@@ -9,17 +9,25 @@ const router = Router();
 
 /**
  * POST /api/auth/login
- * Iniciar sesión
- * Body: { email, password }
- * Response: { user, token }
+ * Iniciar sesión — setea cookies httpOnly
  */
 router.post('/login', validate(loginSchema), login);
 
 /**
+ * POST /api/auth/refresh
+ * Rotar refresh token + nuevo access token (NO requiere auth middleware)
+ */
+router.post('/refresh', refresh);
+
+/**
+ * POST /api/auth/logout
+ * Invalidar refresh token + limpiar cookies
+ */
+router.post('/logout', authMiddleware, logout);
+
+/**
  * GET /api/auth/me
  * Obtener datos del usuario autenticado
- * Headers: Authorization: Bearer {token}
- * Response: { user }
  */
 router.get('/me', authMiddleware, getCurrentUser);
 

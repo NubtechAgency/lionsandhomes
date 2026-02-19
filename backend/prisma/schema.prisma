@@ -12,12 +12,28 @@ datasource db {
 
 // Usuario único del sistema
 model User {
+  id             Int            @id @default(autoincrement())
+  email          String         @unique
+  password       String         // Hash bcrypt
+  name           String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  refreshTokens  RefreshToken[]
+}
+
+// Refresh tokens para rotación de sesiones
+model RefreshToken {
   id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String   // Hash bcrypt
-  name      String
+  token     String   @unique
+  userId    Int
+  expiresAt DateTime
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // Proyectos de remodelación
