@@ -2,6 +2,8 @@
 import { Router } from 'express';
 import { login, getCurrentUser } from '../controllers/authController';
 import { authMiddleware } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { loginSchema } from '../schemas/auth.schemas';
 
 const router = Router();
 
@@ -11,7 +13,7 @@ const router = Router();
  * Body: { email, password }
  * Response: { user, token }
  */
-router.post('/login', login);
+router.post('/login', validate(loginSchema), login);
 
 /**
  * GET /api/auth/me

@@ -7,6 +7,8 @@ import {
   deleteInvoice,
 } from '../controllers/invoiceController';
 import { authMiddleware } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { invoiceParamSchema, invoiceIdParamSchema } from '../schemas/invoice.schemas';
 
 const router = Router();
 
@@ -27,7 +29,6 @@ const upload = multer({
 router.use(authMiddleware);
 
 // POST /api/invoices/upload — Sube una factura (multipart) y la asocia a la transacción
-// Wrapper para capturar errores de multer (fileFilter) y devolver 400 en vez de 500
 router.post('/upload', (req: Request, res: Response, next: NextFunction): void => {
   upload.single('file')(req, res, (err) => {
     if (err) {
@@ -39,9 +40,9 @@ router.post('/upload', (req: Request, res: Response, next: NextFunction): void =
 }, uploadInvoice);
 
 // GET /api/invoices/:transactionId — Obtiene todas las facturas con URLs de descarga
-router.get('/:transactionId', getInvoiceUrls);
+router.get('/:transactionId', validate(invoiceParamSchema, 'params'), getInvoiceUrls);
 
 // DELETE /api/invoices/:invoiceId — Elimina una factura individual
-router.delete('/:invoiceId', deleteInvoice);
+router.delete('/:invoiceId', validate(invoiceIdParamSchema, 'params'), deleteInvoice);
 
 export default router;

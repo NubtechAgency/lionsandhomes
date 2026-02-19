@@ -66,6 +66,39 @@ const loginLimiter = rateLimit({
   message: { error: 'Too Many Requests', message: 'Demasiados intentos de login, intenta de nuevo en 15 minutos' },
 });
 
+// Rate limiting específico para endpoints CPU/IO intensivos
+const dashboardLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas peticiones al dashboard' },
+});
+
+const checkDuplicatesLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas peticiones de duplicados' },
+});
+
+const invoiceUploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas subidas de factura' },
+});
+
+const syncLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas sincronizaciones' },
+});
+
 // Parser de JSON con límite de tamaño
 app.use(express.json({ limit: '1mb' }));
 
@@ -94,8 +127,14 @@ app.get('/', (_req: Request, res: Response) => {
   });
 });
 
-// Usar rutas de la API (login con rate limit estricto)
+// Rate limiters específicos por endpoint (antes de las rutas)
 app.use('/api/auth/login', loginLimiter);
+app.use('/api/dashboard/stats', dashboardLimiter);
+app.use('/api/transactions/check-duplicates', checkDuplicatesLimiter);
+app.use('/api/invoices/upload', invoiceUploadLimiter);
+app.use('/api/sync/transactions', syncLimiter);
+
+// Rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/sync', syncRoutes);

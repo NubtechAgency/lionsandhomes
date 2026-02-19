@@ -28,16 +28,8 @@ const generateToken = (userId: number, email: string): string => {
  */
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Zod ya validó email y password
     const { email, password } = req.body;
-
-    // Validar campos requeridos
-    if (!email || !password) {
-      res.status(400).json({
-        error: 'Datos incompletos',
-        message: 'Email y password son requeridos'
-      });
-      return;
-    }
 
     // Buscar el usuario por email
     const user = await prisma.user.findUnique({

@@ -39,19 +39,10 @@ interface IncomingTransaction {
  */
 export const syncTransactions = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 📥 Recibir array de transacciones desde n8n
+    // Zod ya validó que transactions es un array con campos requeridos
     const { transactions } = req.body as { transactions: IncomingTransaction[] };
 
-    // ✅ Validar que llegó un array
-    if (!Array.isArray(transactions)) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'El campo "transactions" debe ser un array',
-      });
-      return;
-    }
-
-    // 📊 Estadísticas para el reporte final
+    // Estadísticas para el reporte final
     let created = 0;
     let updated = 0;
     let skipped = 0;
@@ -60,14 +51,7 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
     // 🔄 Procesar cada transacción
     for (const txn of transactions) {
       try {
-        // ✅ Validar campos obligatorios
-        if (!txn.externalId || !txn.date || txn.amount === undefined || !txn.concept) {
-          skipped++;
-          errors.push(`Transacción con datos incompletos (externalId: ${txn.externalId || 'missing'})`);
-          continue;
-        }
-
-        // 🔄 Upsert atómico: crea si no existe, actualiza si ya existe
+        // Campos ya validados por Zod — upsert atómico: crea si no existe, actualiza si ya existe
         // NO sobrescribe asignaciones manuales (projectId, expenseCategory, notes, etc.)
         const existingTransaction = await prisma.transaction.findUnique({
           where: { externalId: txn.externalId },

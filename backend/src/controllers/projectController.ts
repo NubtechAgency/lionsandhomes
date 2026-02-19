@@ -1,23 +1,12 @@
 // Controlador de gestión de proyectos
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES } from '../lib/constants';
+
+// Re-export para que otros controllers puedan seguir importando desde aquí
+export { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES };
 
 const prisma = new PrismaClient();
-
-// Categorías de gasto de Lions
-export const EXPENSE_CATEGORIES = [
-  'MATERIAL_Y_MANO_DE_OBRA',
-  'DECORACION',
-  'COMPRA_Y_GASTOS',
-  'OTROS',
-  'GASTOS_PISOS',
-  'BUROCRACIA',
-  'SUELDOS',
-  'PRESTAMOS',
-] as const;
-
-// Categorías exentas de factura (no cuentan en "sin factura")
-export const INVOICE_EXEMPT_CATEGORIES = ['SUELDOS', 'PRESTAMOS'] as const;
 
 /**
  * GET /api/projects
@@ -68,15 +57,8 @@ export const listProjects = async (req: Request, res: Response): Promise<void> =
  */
 export const getProject = async (req: Request, res: Response): Promise<void> => {
   try {
+    // ID validado por Zod (idParamSchema)
     const projectId = parseInt(req.params.id as string);
-
-    if (isNaN(projectId)) {
-      res.status(400).json({
-        error: 'ID inválido',
-        message: 'El ID del proyecto debe ser un número'
-      });
-      return;
-    }
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -140,39 +122,11 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
  */
 export const createProject = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Zod ya validó: name (min 1), totalBudget (>= 0), status (enum), categoryBudgets
     const { name, description, status, totalBudget, categoryBudgets, startDate, endDate } = req.body;
 
-    // Validar campos requeridos (solo nombre es obligatorio)
-    if (!name) {
-      res.status(400).json({
-        error: 'Datos incompletos',
-        message: 'El nombre del proyecto es requerido'
-      });
-      return;
-    }
-
-    // Validar que totalBudget sea un número no negativo (0 permitido, undefined = 0)
     const budget = totalBudget !== undefined ? totalBudget : 0;
-    if (typeof budget !== 'number' || budget < 0) {
-      res.status(400).json({
-        error: 'Presupuesto inválido',
-        message: 'El presupuesto total debe ser un número no negativo'
-      });
-      return;
-    }
-
-    // categoryBudgets es opcional, default {}
     const budgets = categoryBudgets && typeof categoryBudgets === 'object' ? categoryBudgets : {};
-
-    // Validar estado si se proporciona
-    const validStatuses = ['ACTIVE', 'COMPLETED', 'ARCHIVED'];
-    if (status && !validStatuses.includes(status)) {
-      res.status(400).json({
-        error: 'Estado inválido',
-        message: `El estado debe ser uno de: ${validStatuses.join(', ')}`
-      });
-      return;
-    }
 
     // Crear el proyecto
     const project = await prisma.project.create({
@@ -209,16 +163,8 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
  */
 export const updateProject = async (req: Request, res: Response): Promise<void> => {
   try {
+    // ID y body validados por Zod
     const projectId = parseInt(req.params.id as string);
-
-    if (isNaN(projectId)) {
-      res.status(400).json({
-        error: 'ID inválido',
-        message: 'El ID del proyecto debe ser un número'
-      });
-      return;
-    }
-
     const { name, description, status, totalBudget, categoryBudgets, startDate, endDate } = req.body;
 
     // Verificar que el proyecto existe
@@ -237,29 +183,11 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
     // Construir objeto de actualización solo con campos proporcionados
     const updateData: any = {};
 
+    // Zod ya validó tipos, enums y rangos
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (status !== undefined) {
-      const validStatuses = ['ACTIVE', 'COMPLETED', 'ARCHIVED'];
-      if (!validStatuses.includes(status)) {
-        res.status(400).json({
-          error: 'Estado inválido',
-          message: `El estado debe ser uno de: ${validStatuses.join(', ')}`
-        });
-        return;
-      }
-      updateData.status = status;
-    }
-    if (totalBudget !== undefined) {
-      if (typeof totalBudget !== 'number' || totalBudget < 0) {
-        res.status(400).json({
-          error: 'Presupuesto inválido',
-          message: 'El presupuesto total debe ser un número no negativo'
-        });
-        return;
-      }
-      updateData.totalBudget = totalBudget;
-    }
+    if (status !== undefined) updateData.status = status;
+    if (totalBudget !== undefined) updateData.totalBudget = totalBudget;
     if (categoryBudgets !== undefined) {
       updateData.categoryBudgets = JSON.stringify(categoryBudgets);
     }
@@ -295,14 +223,6 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
 export const deleteProject = async (req: Request, res: Response): Promise<void> => {
   try {
     const projectId = parseInt(req.params.id as string);
-
-    if (isNaN(projectId)) {
-      res.status(400).json({
-        error: 'ID inválido',
-        message: 'El ID del proyecto debe ser un número'
-      });
-      return;
-    }
 
     // Verificar que el proyecto existe
     const existingProject = await prisma.project.findUnique({

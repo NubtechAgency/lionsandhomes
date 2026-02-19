@@ -1,7 +1,7 @@
 // 💰 Controlador de gestión de transacciones
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES } from './projectController';
+import { INVOICE_EXEMPT_CATEGORIES } from './projectController';
 
 const prisma = new PrismaClient();
 
@@ -11,25 +11,10 @@ const prisma = new PrismaClient();
  */
 export const createTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Zod ya validó: date, amount (number), concept (string min 1), expenseCategory (enum), etc.
     const { date, amount, concept, projectId, allocations: bodyAllocations, expenseCategory, notes, isFixed } = req.body;
 
-    if (!date || amount === undefined || !concept) {
-      res.status(400).json({
-        error: 'Campos requeridos',
-        message: 'Se requiere date, amount y concept',
-      });
-      return;
-    }
-
-    if (typeof amount !== 'number' || isNaN(amount)) {
-      res.status(400).json({
-        error: 'Importe inválido',
-        message: 'El importe debe ser un número',
-      });
-      return;
-    }
-
-    // Validar allocations si se proporcionan (multi-proyecto)
+    // Validar allocations si se proporcionan (multi-proyecto) — lógica de negocio
     if (bodyAllocations && Array.isArray(bodyAllocations) && bodyAllocations.length > 0) {
       const allocSum = bodyAllocations.reduce((s: number, a: any) => s + a.amount, 0);
       if (Math.abs(allocSum - amount) > 0.01) {
@@ -56,15 +41,6 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
         });
         return;
       }
-    }
-
-    // Validar expenseCategory si se proporciona
-    if (expenseCategory && !EXPENSE_CATEGORIES.includes(expenseCategory)) {
-      res.status(400).json({
-        error: 'Categoría inválida',
-        message: `La categoría debe ser una de: ${EXPENSE_CATEGORIES.join(', ')}`,
-      });
-      return;
     }
 
     // Auto-sync por concepto: si no se proporcionó categoría/tipo, heredar de transacciones existentes
@@ -307,16 +283,7 @@ export const getTransaction = async (req: Request, res: Response): Promise<void>
   try {
     const transactionId = parseInt(req.params.id as string);
 
-    // ✅ Validar ID numérico
-    if (isNaN(transactionId)) {
-      res.status(400).json({
-        error: 'ID inválido',
-        message: 'El ID de la transacción debe ser un número'
-      });
-      return;
-    }
-
-    // 🔍 Buscar transacción
+    // Buscar transacción
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
       include: {
@@ -360,16 +327,6 @@ export const getTransaction = async (req: Request, res: Response): Promise<void>
 export const updateTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
     const transactionId = parseInt(req.params.id as string);
-
-    // ✅ Validar ID numérico
-    if (isNaN(transactionId)) {
-      res.status(400).json({
-        error: 'ID inválido',
-        message: 'El ID de la transacción debe ser un número'
-      });
-      return;
-    }
-
     const { projectId, allocations: bodyAllocations, expenseCategory, notes, isFixed, date, amount, concept } = req.body;
 
     // 🔍 Verificar que la transacción existe
@@ -410,21 +367,9 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       }
     }
 
-    // ✅ Validar y actualizar expenseCategory
+    // Actualizar expenseCategory (Zod ya validó el enum)
     if (expenseCategory !== undefined) {
-      if (expenseCategory === null) {
-        updateData.expenseCategory = null;
-      } else {
-        if (!EXPENSE_CATEGORIES.includes(expenseCategory)) {
-          res.status(400).json({
-            error: 'Categoría inválida',
-            message: `La categoría debe ser una de: ${EXPENSE_CATEGORIES.join(', ')}`
-          });
-          return;
-        }
-
-        updateData.expenseCategory = expenseCategory;
-      }
+      updateData.expenseCategory = expenseCategory;
     }
 
     // Actualizar notes
@@ -564,14 +509,6 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
 export const archiveTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
     const transactionId = parseInt(req.params.id as string);
-
-    if (isNaN(transactionId)) {
-      res.status(400).json({
-        error: 'ID inválido',
-        message: 'El ID de la transacción debe ser un número'
-      });
-      return;
-    }
 
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId }
