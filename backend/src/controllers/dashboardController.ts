@@ -279,8 +279,8 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
   } catch (error) {
     console.error('Error al obtener estadísticas del dashboard:', error);
     res.status(500).json({
-      error: 'Error al obtener estadísticas',
-      message: error instanceof Error ? error.message : 'Error desconocido',
+      error: 'Error del servidor',
+      message: 'Error al obtener estadísticas del dashboard',
     });
   }
 };

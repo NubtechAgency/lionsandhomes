@@ -10,9 +10,20 @@ import {
   REFRESH_TOKEN_COOKIE,
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
+  legacyAccessTokenClearOptions,
+  legacyRefreshTokenClearOptions,
 } from '../lib/cookies';
 
 const prisma = new PrismaClient();
+
+/**
+ * Limpia cookies legacy que usaban domain: '.nubtechagency.com'.
+ * Sin esto el browser enviaría AMBAS cookies (old broad-domain + new host-only).
+ */
+const clearLegacyCookies = (res: Response): void => {
+  res.clearCookie(ACCESS_TOKEN_COOKIE, legacyAccessTokenClearOptions);
+  res.clearCookie(REFRESH_TOKEN_COOKIE, legacyRefreshTokenClearOptions);
+};
 
 /**
  * Genera un access token JWT (corta duración: 15 min)
@@ -76,7 +87,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       });
     }
 
-    // Setear cookies httpOnly
+    // Limpiar cookies legacy con domain amplio (migración)
+    clearLegacyCookies(res);
+
+    // Setear cookies httpOnly (host-only, sin domain)
     res.cookie(ACCESS_TOKEN_COOKIE, accessToken, accessTokenCookieOptions);
     res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, refreshTokenCookieOptions);
 
@@ -119,6 +133,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
       }
       res.clearCookie(ACCESS_TOKEN_COOKIE, accessTokenCookieOptions);
       res.clearCookie(REFRESH_TOKEN_COOKIE, refreshTokenCookieOptions);
+      clearLegacyCookies(res);
       res.status(401).json({ error: 'No autorizado', message: 'Refresh token inválido o expirado' });
       return;
     }
@@ -134,9 +149,14 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     // Nuevo access token
     const accessToken = generateAccessToken(storedToken.userId, storedToken.user.email);
 
-    // Setear nuevas cookies
+    // Limpiar cookies legacy con domain amplio (migración)
+    clearLegacyCookies(res);
+
+    // Setear nuevas cookies (host-only, sin domain)
     res.cookie(ACCESS_TOKEN_COOKIE, accessToken, accessTokenCookieOptions);
     res.cookie(REFRESH_TOKEN_COOKIE, newRefreshToken, refreshTokenCookieOptions);
+
+    await logAudit({ action: 'REFRESH', entityType: 'User', userId: storedToken.userId, ipAddress: getClientIp(req) });
 
     res.json({
       message: 'Token refreshed',
@@ -162,6 +182,7 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
 
     res.clearCookie(ACCESS_TOKEN_COOKIE, accessTokenCookieOptions);
     res.clearCookie(REFRESH_TOKEN_COOKIE, refreshTokenCookieOptions);
+    clearLegacyCookies(res);
 
     await logAudit({ action: 'LOGOUT', entityType: 'User', userId: req.userId, ipAddress: getClientIp(req) });
 

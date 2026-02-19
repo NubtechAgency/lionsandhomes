@@ -22,8 +22,10 @@ router.post('/refresh', refresh);
 /**
  * POST /api/auth/logout
  * Invalidar refresh token + limpiar cookies
+ * NO requiere auth middleware: si el access token expiró (15min idle),
+ * el usuario debe poder cerrar sesión igualmente usando el refresh token.
  */
-router.post('/logout', authMiddleware, logout);
+router.post('/logout', logout);
 
 /**
  * GET /api/auth/me

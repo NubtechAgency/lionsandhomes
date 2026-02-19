@@ -471,24 +471,37 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       }
     });
 
-    // 🔄 Auto-sync: actualizar todas las transacciones con el mismo concepto (solo isFixed y expenseCategory)
+    // 🔄 Auto-sync: actualizar transacciones con el mismo concepto (solo isFixed y expenseCategory)
+    // Limitado a 500 para prevenir corrupción masiva accidental
     const syncData: any = {};
     if (isFixed !== undefined) syncData.isFixed = isFixed;
     if (expenseCategory !== undefined) syncData.expenseCategory = expenseCategory === null ? null : expenseCategory;
 
     let syncedCount = 0;
     if (Object.keys(syncData).length > 0 && existingTransaction.concept) {
-      const result = await prisma.transaction.updateMany({
+      // Verificar cuántas se verían afectadas antes de aplicar
+      const affectedCount = await prisma.transaction.count({
         where: {
           concept: existingTransaction.concept,
           id: { not: transactionId },
         },
-        data: syncData,
       });
-      syncedCount = result.count;
+
+      if (affectedCount <= 500) {
+        const result = await prisma.transaction.updateMany({
+          where: {
+            concept: existingTransaction.concept,
+            id: { not: transactionId },
+          },
+          data: syncData,
+        });
+        syncedCount = result.count;
+      } else {
+        console.warn(`Auto-sync bloqueado: ${affectedCount} transacciones con concepto "${existingTransaction.concept}" excede límite de 500`);
+      }
     }
 
-    await logAudit({ action: 'UPDATE', entityType: 'Transaction', entityId: transactionId, userId: req.userId, details: updateData, ipAddress: getClientIp(req) });
+    await logAudit({ action: 'UPDATE', entityType: 'Transaction', entityId: transactionId, userId: req.userId, details: { ...updateData, syncedCount }, ipAddress: getClientIp(req) });
 
     res.json({
       message: syncedCount > 0
@@ -561,6 +574,7 @@ export const checkDuplicates = async (_req: Request, res: Response): Promise<voi
       where: { isArchived: false },
       select: { id: true, date: true, amount: true, concept: true, externalId: true, isManual: true },
       orderBy: { date: 'desc' },
+      take: 10000, // Límite para prevenir OOM en datasets grandes
     });
 
     // 1. Duplicados por externalId

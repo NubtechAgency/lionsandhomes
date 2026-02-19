@@ -7,6 +7,29 @@ import { logAudit, getClientIp } from '../services/auditLog';
 const prisma = new PrismaClient();
 
 /**
+ * Valida los magic bytes del archivo para verificar que el contenido real
+ * coincide con el MIME type declarado (previene MIME spoofing).
+ */
+function validateMagicBytes(buffer: Buffer, mimetype: string): boolean {
+  if (buffer.length < 12) return false;
+  const hex = buffer.subarray(0, 4).toString('hex');
+
+  switch (mimetype) {
+    case 'application/pdf':
+      return hex.startsWith('25504446'); // %PDF
+    case 'image/jpeg':
+      return hex.startsWith('ffd8ff');
+    case 'image/png':
+      return hex === '89504e47'; // ‰PNG
+    case 'image/webp':
+      // RIFF....WEBP
+      return hex === '52494646' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+    default:
+      return false;
+  }
+}
+
+/**
  * POST /api/invoices/upload
  * Sube una factura y la asocia a una transacción (permite múltiples por transacción)
  */
@@ -29,6 +52,15 @@ export async function uploadInvoice(req: Request, res: Response): Promise<void> 
       res.status(400).json({
         error: 'Tipo de archivo no permitido',
         message: 'Solo se permiten archivos PDF, JPG, PNG y WebP',
+      });
+      return;
+    }
+
+    // Validar magic bytes: el contenido real del archivo debe coincidir con el MIME declarado
+    if (!validateMagicBytes(file.buffer, file.mimetype)) {
+      res.status(400).json({
+        error: 'Archivo inválido',
+        message: 'El contenido del archivo no coincide con el tipo declarado',
       });
       return;
     }
@@ -143,6 +175,8 @@ export async function getInvoiceUrls(req: Request, res: Response): Promise<void>
         createdAt: inv.createdAt,
       }))
     );
+
+    await logAudit({ action: 'DOWNLOAD', entityType: 'Invoice', entityId: transactionId, userId: req.userId, details: { count: invoices.length }, ipAddress: getClientIp(req) });
 
     res.json({
       invoices: invoicesWithUrls,

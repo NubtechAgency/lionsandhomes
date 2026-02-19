@@ -30,6 +30,12 @@ for (const key of REQUIRED_ENV) {
   }
 }
 
+// Validar fuerza del JWT_SECRET en producción
+if (process.env.NODE_ENV === 'production' && (process.env.JWT_SECRET || '').length < 32) {
+  console.error('ERROR: JWT_SECRET debe tener al menos 32 caracteres en producción. Abortando.');
+  process.exit(1);
+}
+
 const app: Application = express();
 const PORT = process.env.PORT || 8000;
 
@@ -103,6 +109,15 @@ const syncLimiter = rateLimit({
   message: { error: 'Too Many Requests', message: 'Demasiadas sincronizaciones' },
 });
 
+// Rate limit para refresh de tokens (previene abuso de rotación)
+const refreshLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiados intentos de refresh' },
+});
+
 // Parser de JSON con límite de tamaño
 app.use(express.json({ limit: '1mb' }));
 
@@ -133,6 +148,7 @@ app.get('/', (_req: Request, res: Response) => {
 
 // Rate limiters específicos por endpoint (antes de las rutas)
 app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/refresh', refreshLimiter);
 app.use('/api/dashboard/stats', dashboardLimiter);
 app.use('/api/transactions/check-duplicates', checkDuplicatesLimiter);
 app.use('/api/invoices/upload', invoiceUploadLimiter);
