@@ -38,6 +38,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loadUser();
   }, []);
 
+  // Escuchar evento de sesión expirada (emitido por fetchAPI cuando refresh falla)
+  // Limpia el estado → React Router redirige a /login sin hard reload
+  useEffect(() => {
+    const handleSessionExpired = () => setUser(null);
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
+  }, []);
+
   const login = async (credentials: LoginCredentials) => {
     const response = await authAPI.login(credentials);
     setUser(response.user);

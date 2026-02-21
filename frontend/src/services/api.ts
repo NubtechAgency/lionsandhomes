@@ -68,8 +68,9 @@ async function fetchAPI<T>(
       // Reintentar la request original con la nueva cookie
       response = await fetch(`${API_URL}${endpoint}`, config);
     } else {
-      // Refresh falló — redirigir a login
-      window.location.href = '/login';
+      // Refresh falló — notificar a AuthContext para que limpie el estado.
+      // Evento en vez de window.location.href evita hard-reload loop.
+      window.dispatchEvent(new Event('auth:session-expired'));
       throw new Error('Sesión expirada');
     }
   }
