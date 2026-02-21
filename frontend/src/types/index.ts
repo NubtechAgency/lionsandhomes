@@ -12,12 +12,6 @@ export interface LoginCredentials {
   password: string;
 }
 
-export interface RegisterData {
-  email: string;
-  password: string;
-  name: string;
-}
-
 export interface AuthResponse {
   message: string;
   user: User;

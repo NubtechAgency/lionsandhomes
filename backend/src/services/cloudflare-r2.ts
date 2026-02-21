@@ -18,22 +18,6 @@ const r2Client = new S3Client({
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || 'lions-invoices';
 
 /**
- * Genera una URL firmada para subir un archivo a R2
- * @param key - Clave única del archivo en R2 (ej: invoices/1-1234567890-factura.pdf)
- * @param expiresIn - Tiempo de expiración en segundos (default: 600 = 10 minutos)
- * @returns URL firmada para PUT
- */
-export async function generateUploadUrl(key: string, expiresIn: number = 600): Promise<string> {
-  const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-  });
-
-  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn });
-  return uploadUrl;
-}
-
-/**
  * Genera una URL firmada para descargar un archivo desde R2
  * @param key - Clave del archivo en R2
  * @param expiresIn - Tiempo de expiración en segundos (default: 3600 = 1 hora)
