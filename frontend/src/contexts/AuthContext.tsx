@@ -1,7 +1,9 @@
 // Context de autenticación — httpOnly cookies (sin localStorage)
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { User, LoginCredentials } from '../types';
-import { authAPI } from '../services/api';
+import { authAPI, resetSessionExpired } from '../services/api';
+
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 interface AuthContextType {
   user: User | null;
@@ -21,21 +23,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Al cargar la app, verificar si hay sesión activa (cookie httpOnly)
+  // Al cargar la app, verificar si hay sesión activa (cookie httpOnly).
+  // Usa fetch directo (NO fetchAPI) para evitar el interceptor de refresh
+  // que causa loops cuando no hay sesión.
   useEffect(() => {
-    const loadUser = async () => {
+    const checkSession = async () => {
       try {
-        const response = await authAPI.getCurrentUser();
-        setUser(response.user);
+        // 1. Intentar obtener usuario con access token actual
+        let res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+
+        // 2. Si el access token expiró, intentar refresh UNA vez
+        if (res.status === 401) {
+          const refreshRes = await fetch(`${API_URL}/api/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include',
+          });
+          if (refreshRes.ok) {
+            // Refresh exitoso — reintentar /me con el nuevo access token
+            res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+          }
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        } else {
+          setUser(null);
+        }
       } catch {
-        // No hay sesión activa o token expirado
         setUser(null);
       } finally {
         setLoading(false);
       }
     };
 
-    loadUser();
+    checkSession();
   }, []);
 
   // Escuchar evento de sesión expirada (emitido por fetchAPI cuando refresh falla)
@@ -48,6 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (credentials: LoginCredentials) => {
     const response = await authAPI.login(credentials);
+    resetSessionExpired();
     setUser(response.user);
   };
 

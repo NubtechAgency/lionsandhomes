@@ -19,6 +19,9 @@ import type {
 // En dev usa Vite proxy (mismo origen), en prod usa VITE_API_URL
 const API_URL = import.meta.env.VITE_API_URL || '';
 
+// Flag global: si la sesión ya expiró, no intentar más refreshes
+let sessionExpired = false;
+
 // Singleton para deduplicar refreshes concurrentes
 let refreshPromise: Promise<boolean> | null = null;
 
@@ -28,10 +31,19 @@ async function attemptRefresh(): Promise<boolean> {
       method: 'POST',
       credentials: 'include',
     });
-    return res.ok;
+    if (res.ok) {
+      sessionExpired = false;
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
+}
+
+/** Resetear el flag de sesión expirada (llamar tras login exitoso) */
+export function resetSessionExpired() {
+  sessionExpired = false;
 }
 
 /**
@@ -52,12 +64,14 @@ async function fetchAPI<T>(
 
   let response = await fetch(`${API_URL}${endpoint}`, config);
 
-  // Si 401 y no es login ni refresh, intentar refresh transparente
-  if (
-    response.status === 401 &&
-    !endpoint.includes('/auth/login') &&
-    !endpoint.includes('/auth/refresh')
-  ) {
+  // Si 401, intentar refresh transparente.
+  // Excluir: login, refresh, logout, y si ya sabemos que la sesión expiró.
+  const isAuthEndpoint =
+    endpoint.includes('/auth/login') ||
+    endpoint.includes('/auth/refresh') ||
+    endpoint.includes('/auth/logout');
+
+  if (response.status === 401 && !isAuthEndpoint && !sessionExpired) {
     // Deduplicar: si ya hay un refresh en curso, esperar a ese
     if (!refreshPromise) {
       refreshPromise = attemptRefresh().finally(() => { refreshPromise = null; });
@@ -68,8 +82,8 @@ async function fetchAPI<T>(
       // Reintentar la request original con la nueva cookie
       response = await fetch(`${API_URL}${endpoint}`, config);
     } else {
-      // Refresh falló — notificar a AuthContext para que limpie el estado.
-      // Evento en vez de window.location.href evita hard-reload loop.
+      // Refresh falló — marcar sesión expirada y notificar AuthContext.
+      sessionExpired = true;
       window.dispatchEvent(new Event('auth:session-expired'));
       throw new Error('Sesión expirada');
     }

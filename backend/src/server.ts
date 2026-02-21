@@ -57,12 +57,14 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting global (100 req/15min por IP)
+// Rate limiting global (500 req/15min por IP)
+// Auth routes se excluyen porque tienen sus propios limiters (login, refresh)
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path.startsWith('/api/auth/'),
   message: { error: 'Too Many Requests', message: 'Demasiadas peticiones, intenta de nuevo más tarde' },
 });
 app.use(globalLimiter);
