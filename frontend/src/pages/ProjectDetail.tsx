@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { projectAPI, transactionAPI } from '../services/api';
 import Navbar from '../components/Navbar';
@@ -20,6 +20,46 @@ export default function ProjectDetail() {
   const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Obtener importe asignado a este proyecto (en vez del total de la transaccion)
+  const getAllocatedAmount = useMemo(() => {
+    return (t: Transaction): number => {
+      if (project && t.allocations?.length) {
+        const alloc = t.allocations.find(a => a.projectId === project.id);
+        if (alloc) return alloc.amount;
+      }
+      return t.amount;
+    };
+  }, [project]);
+
+  // Memoize spending calculations
+  const { spendingByCategory, fixedTotal, variableTotal } = useMemo(() => {
+    const spending: Record<string, number> = {};
+    let fTotal = 0;
+    let vTotal = 0;
+    transactions.forEach(t => {
+      const allocAmt = getAllocatedAmount(t);
+      if (allocAmt < 0) {
+        const amt = Math.abs(allocAmt);
+        if (t.isFixed) fTotal += amt;
+        else vTotal += amt;
+        if (t.expenseCategory) {
+          spending[t.expenseCategory] = (spending[t.expenseCategory] || 0) + amt;
+        }
+      }
+    });
+    return { spendingByCategory: spending, fixedTotal: fTotal, variableTotal: vTotal };
+  }, [transactions, getAllocatedAmount]);
+
+  // Memoize sorted transactions
+  const sortedTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => {
+      const dir = txSortOrder === 'asc' ? 1 : -1;
+      if (txSortBy === 'amount') return (getAllocatedAmount(a) - getAllocatedAmount(b)) * dir;
+      if (txSortBy === 'concept') return a.concept.localeCompare(b.concept) * dir;
+      return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir;
+    });
+  }, [transactions, txSortBy, txSortOrder, getAllocatedAmount]);
 
   useEffect(() => {
     if (id) loadData(parseInt(id));
@@ -80,35 +120,6 @@ export default function ProjectDetail() {
   const remaining = project.totalBudget - stats.totalSpent;
   const invoiceCount = transactions.filter(t => t.hasInvoice).length;
 
-  // Obtener importe asignado a este proyecto (en vez del total de la transaccion)
-  const getAllocatedAmount = (t: Transaction): number => {
-    if (t.allocations?.length) {
-      const alloc = t.allocations.find(a => a.projectId === project.id);
-      if (alloc) return alloc.amount;
-    }
-    return t.amount;
-  };
-
-  // Build spendingByCategory for progress list (usando importes asignados)
-  const spendingByCategory: Record<string, number> = {};
-  const fixedByCategory: Record<string, number> = {};
-  let fixedTotal = 0;
-  let variableTotal = 0;
-  transactions.forEach(t => {
-    const allocAmt = getAllocatedAmount(t);
-    if (allocAmt < 0) {
-      const amt = Math.abs(allocAmt);
-      if (t.isFixed) fixedTotal += amt;
-      else variableTotal += amt;
-      if (t.expenseCategory) {
-        spendingByCategory[t.expenseCategory] = (spendingByCategory[t.expenseCategory] || 0) + amt;
-        if (t.isFixed) {
-          fixedByCategory[t.expenseCategory] = (fixedByCategory[t.expenseCategory] || 0) + amt;
-        }
-      }
-    }
-  });
-
   const statusBadge = {
     ACTIVE: 'bg-green-100 text-green-800',
     COMPLETED: 'bg-blue-100 text-blue-800',
@@ -129,13 +140,6 @@ export default function ProjectDetail() {
       setTxSortOrder('desc');
     }
   };
-
-  const sortedTransactions = [...transactions].sort((a, b) => {
-    const dir = txSortOrder === 'asc' ? 1 : -1;
-    if (txSortBy === 'amount') return (getAllocatedAmount(a) - getAllocatedAmount(b)) * dir;
-    if (txSortBy === 'concept') return a.concept.localeCompare(b.concept) * dir;
-    return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir;
-  });
 
   const TxSortIcon = ({ column }: { column: string }) => {
     if (txSortBy !== column) return null;

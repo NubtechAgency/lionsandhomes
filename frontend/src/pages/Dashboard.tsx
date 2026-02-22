@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { dashboardAPI, projectAPI, transactionAPI } from '../services/api';
-import type { DashboardStats, Project, Transaction } from '../types';
+import type { DashboardStats, Project } from '../types';
 import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import ExpenseBarChart from '../components/charts/ExpenseBarChart';
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [chartTransactions, setChartTransactions] = useState<{ amount: number; date: string; isFixed: boolean }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,20 +25,6 @@ export default function Dashboard() {
     () => projects.filter(p => p.name !== 'General'),
     [projects]
   );
-
-  // Compute fixed/variable totals from transactions
-  const { totalFixed, totalVariable } = useMemo(() => {
-    let fixed = 0;
-    let variable = 0;
-    allTransactions.forEach(t => {
-      if (t.amount < 0) {
-        const amt = Math.abs(t.amount);
-        if (t.isFixed) fixed += amt;
-        else variable += amt;
-      }
-    });
-    return { totalFixed: fixed, totalVariable: variable };
-  }, [allTransactions]);
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -60,13 +46,13 @@ export default function Dashboard() {
         const [statsData, txData] = await Promise.all([
           dashboardAPI.getStats(selectedProjectId),
           transactionAPI.listTransactions(
-            selectedProjectId ? { projectId: selectedProjectId } : undefined,
-            5000,
+            selectedProjectId ? { projectId: selectedProjectId, amountType: 'expense' } : { amountType: 'expense' },
+            500,
             0
           ),
         ]);
         setStats(statsData);
-        setAllTransactions(txData.transactions);
+        setChartTransactions(txData.transactions.map((t: any) => ({ amount: t.amount, date: t.date, isFixed: t.isFixed })));
       } catch (err) {
         console.error('Error al cargar datos:', err);
         setError(err instanceof Error ? err.message : 'Error al cargar datos');
@@ -150,12 +136,12 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
               <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5">
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Evolución de Gastos</h3>
-                <ExpenseBarChart transactions={allTransactions} />
+                <ExpenseBarChart transactions={chartTransactions as any} />
               </div>
               <div className="flex flex-col gap-4">
                 <KPICard
                   title="Gastos Fijos"
-                  value={`€${formatCurrency(totalFixed)}`}
+                  value={`€${formatCurrency(stats.totalFixed)}`}
                   subtitle="Total acumulado"
                   icon={Lock}
                   color="blue"
@@ -163,7 +149,7 @@ export default function Dashboard() {
                 />
                 <KPICard
                   title="Gastos Variables"
-                  value={`€${formatCurrency(totalVariable)}`}
+                  value={`€${formatCurrency(stats.totalVariable)}`}
                   subtitle="Total acumulado"
                   icon={Repeat}
                   color="amber"

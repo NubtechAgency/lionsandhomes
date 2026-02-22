@@ -1,9 +1,7 @@
 // 🔄 Controlador de sincronización con n8n/Google Sheets
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { logAudit, getClientIp } from '../services/auditLog';
-
-const prisma = new PrismaClient();
 
 /**
  * 📊 ESTRUCTURA DE DATOS QUE LLEGA DESDE N8N
@@ -52,14 +50,7 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
     // 🔄 Procesar cada transacción
     for (const txn of transactions) {
       try {
-        // Campos ya validados por Zod — upsert atómico: crea si no existe, actualiza si ya existe
-        // NO sobrescribe asignaciones manuales (projectId, expenseCategory, notes, etc.)
-        const existingTransaction = await prisma.transaction.findUnique({
-          where: { externalId: txn.externalId },
-          select: { id: true },
-        });
-
-        await prisma.transaction.upsert({
+        const result = await prisma.transaction.upsert({
           where: { externalId: txn.externalId },
           update: {
             date: new Date(txn.date),
@@ -77,13 +68,13 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
           },
         });
 
-        if (existingTransaction) {
-          updated++;
-        } else {
+        // If createdAt equals updatedAt (within 1 second), it was just created
+        if (Math.abs(result.createdAt.getTime() - result.updatedAt.getTime()) < 1000) {
           created++;
+        } else {
+          updated++;
         }
       } catch (error: any) {
-        // Si falla una transacción individual, no paramos todo el proceso
         skipped++;
         errors.push(`Error en transacción ${txn.externalId}`);
         console.error('Error procesando transacción:', txn.externalId, error.message);

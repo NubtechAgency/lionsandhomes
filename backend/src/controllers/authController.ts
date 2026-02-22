@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { logAudit, getClientIp } from '../services/auditLog';
 import {
   ACCESS_TOKEN_COOKIE,
@@ -13,8 +13,6 @@ import {
   legacyAccessTokenClearOptions,
   legacyRefreshTokenClearOptions,
 } from '../lib/cookies';
-
-const prisma = new PrismaClient();
 
 /**
  * Limpia cookies legacy que usaban domain: '.nubtechagency.com'.

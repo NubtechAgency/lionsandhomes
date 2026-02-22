@@ -1,13 +1,15 @@
 // Controlador de gestión de proyectos
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES } from '../lib/constants';
 import { logAudit, getClientIp } from '../services/auditLog';
 
 // Re-export para que otros controllers puedan seguir importando desde aquí
 export { EXPENSE_CATEGORIES, INVOICE_EXEMPT_CATEGORIES };
 
-const prisma = new PrismaClient();
+function safeParseBudgets(raw: string): Record<string, number> {
+  try { return JSON.parse(raw); } catch { return {}; }
+}
 
 /**
  * GET /api/projects
@@ -24,20 +26,25 @@ export const listProjects = async (req: Request, res: Response): Promise<void> =
     const projects = await prisma.project.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: {
-        allocations: {
-          where: { transaction: { isArchived: false } },
-          select: { amount: true }
-        }
-      }
+      include: { _count: { select: { allocations: true } } },
     });
 
-    // Parsear categoryBudgets y calcular totalSpent desde allocations (solo gastos)
-    const projectsWithStats = projects.map(({ allocations, ...project }) => ({
+    // Get totalSpent per project in a single query
+    const projectIds = projects.map(p => p.id);
+    const spentByProject = projectIds.length > 0
+      ? await prisma.transactionProject.groupBy({
+          by: ['projectId'],
+          where: { projectId: { in: projectIds }, amount: { lt: 0 }, transaction: { isArchived: false } },
+          _sum: { amount: true },
+        })
+      : [];
+    const spentMap = new Map(spentByProject.map(s => [s.projectId, Math.abs(s._sum.amount || 0)]));
+
+    const projectsWithStats = projects.map(project => ({
       ...project,
-      categoryBudgets: JSON.parse(project.categoryBudgets),
-      totalSpent: allocations.filter(a => a.amount < 0).reduce((sum, a) => sum + Math.abs(a.amount), 0),
-      _count: { transactions: allocations.length },
+      categoryBudgets: safeParseBudgets(project.categoryBudgets),
+      totalSpent: spentMap.get(project.id) || 0,
+      _count: { transactions: project._count.allocations },
     }));
 
     res.json({
@@ -94,7 +101,7 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
     ).length;
 
     // Parsear categoryBudgets
-    const categoryBudgets = JSON.parse(project.categoryBudgets);
+    const categoryBudgets = safeParseBudgets(project.categoryBudgets);
 
     res.json({
       project: {
@@ -148,7 +155,7 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
       message: 'Proyecto creado exitosamente',
       project: {
         ...project,
-        categoryBudgets: JSON.parse(project.categoryBudgets)
+        categoryBudgets: safeParseBudgets(project.categoryBudgets)
       }
     });
   } catch (error) {
@@ -209,7 +216,7 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
       message: 'Proyecto actualizado exitosamente',
       project: {
         ...project,
-        categoryBudgets: JSON.parse(project.categoryBudgets)
+        categoryBudgets: safeParseBudgets(project.categoryBudgets)
       }
     });
   } catch (error) {
@@ -252,6 +259,16 @@ export const deleteProject = async (req: Request, res: Response): Promise<void> 
       res.status(400).json({
         error: 'Proyecto con transacciones',
         message: `Este proyecto tiene ${existingProject._count.allocations} transacciones asociadas. Elimina primero las asignaciones o considera archivar el proyecto en su lugar.`
+      });
+      return;
+    }
+
+    // Also check denormalized projectId
+    const directRefCount = await prisma.transaction.count({ where: { projectId } });
+    if (directRefCount > 0) {
+      res.status(400).json({
+        error: 'Proyecto con transacciones',
+        message: `Este proyecto tiene ${directRefCount} transacciones directamente asignadas.`
       });
       return;
     }

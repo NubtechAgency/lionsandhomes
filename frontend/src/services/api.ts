@@ -14,6 +14,12 @@ import type {
   UpdateTransactionData,
   TransactionPagination,
   DashboardStats,
+  Invoice,
+  OrphanInvoice,
+  MatchSuggestion,
+  BulkUploadResult,
+  OcrBudgetStatus,
+  OcrStatus,
 } from '../types';
 
 // En dev usa Vite proxy (mismo origen), en prod usa VITE_API_URL
@@ -337,11 +343,96 @@ export const invoiceAPI = {
    */
   deleteInvoice: async (
     invoiceId: number
-  ): Promise<{ message: string; transaction: Transaction }> => {
-    return fetchAPI<{ message: string; transaction: Transaction }>(
+  ): Promise<{ message: string; transaction: Transaction | null }> => {
+    return fetchAPI<{ message: string; transaction: Transaction | null }>(
       `/api/invoices/${invoiceId}`,
       { method: 'DELETE' }
     );
+  },
+
+  /**
+   * Subida masiva de facturas con OCR automático (hasta 10 archivos)
+   */
+  bulkUpload: async (
+    files: File[]
+  ): Promise<{ results: BulkUploadResult[]; budget: OcrBudgetStatus }> => {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+
+    const response = await fetch(`${API_URL}/api/invoices/bulk-upload`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Error en la subida masiva');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Listar facturas huérfanas (sin transacción asignada)
+   */
+  listOrphans: async (
+    filters?: { ocrStatus?: OcrStatus; search?: string },
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<{
+    invoices: OrphanInvoice[];
+    pagination: { total: number; limit: number; offset: number; hasMore: boolean };
+  }> => {
+    const params = new URLSearchParams();
+    if (filters?.ocrStatus) params.append('ocrStatus', filters.ocrStatus);
+    if (filters?.search) params.append('search', filters.search);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    const qs = params.toString();
+    return fetchAPI(`/api/invoices/orphans${qs ? `?${qs}` : ''}`);
+  },
+
+  /**
+   * Obtener sugerencias de matching para una factura huérfana
+   */
+  getSuggestions: async (
+    invoiceId: number
+  ): Promise<{ suggestions: MatchSuggestion[] }> => {
+    return fetchAPI(`/api/invoices/${invoiceId}/suggestions`);
+  },
+
+  /**
+   * Actualizar datos OCR de una factura (corrección manual)
+   */
+  updateOcrData: async (
+    invoiceId: number,
+    data: { ocrAmount?: number; ocrDate?: string; ocrVendor?: string; ocrInvoiceNumber?: string }
+  ): Promise<{ invoice: OrphanInvoice; suggestions: MatchSuggestion[] }> => {
+    return fetchAPI(`/api/invoices/${invoiceId}/ocr`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Vincular una factura huérfana a una transacción
+   */
+  linkToTransaction: async (
+    invoiceId: number,
+    transactionId: number
+  ): Promise<{ message: string; invoice: Invoice }> => {
+    return fetchAPI(`/api/invoices/${invoiceId}/link`, {
+      method: 'PATCH',
+      body: JSON.stringify({ transactionId }),
+    });
+  },
+
+  /**
+   * Obtener estado del presupuesto OCR mensual
+   */
+  getOcrBudget: async (): Promise<OcrBudgetStatus> => {
+    return fetchAPI('/api/invoices/ocr-budget');
   },
 };
 

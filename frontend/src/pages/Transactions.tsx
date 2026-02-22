@@ -133,21 +133,29 @@ export default function Transactions() {
   };
 
   const handleInlineProjectChange = async (transactionId: number, value: string) => {
+    const projectId = value ? parseInt(value) : null;
+    const prev = transactions.map(t => ({ ...t }));
+    setTransactions(txs => txs.map(t =>
+      t.id === transactionId ? { ...t, projectId, allocations: projectId ? [{ id: 0, projectId, amount: t.amount, project: projects.find(p => p.id === projectId) ? { id: projectId, name: projects.find(p => p.id === projectId)!.name } : undefined }] : [] } : t
+    ));
     try {
-      const projectId = value ? parseInt(value) : null;
       await transactionAPI.updateTransaction(transactionId, { projectId });
-      await loadTransactions();
     } catch (err) {
+      setTransactions(prev);
       console.error('Error al cambiar proyecto:', err);
     }
   };
 
   const handleInlineCategoryChange = async (transactionId: number, value: string) => {
+    const expenseCategory = (value as ExpenseCategory) || null;
+    const prev = transactions.map(t => ({ ...t }));
+    setTransactions(txs => txs.map(t =>
+      t.id === transactionId ? { ...t, expenseCategory } : t
+    ));
     try {
-      const expenseCategory = (value as ExpenseCategory) || null;
       await transactionAPI.updateTransaction(transactionId, { expenseCategory });
-      await loadTransactions();
     } catch (err) {
+      setTransactions(prev);
       console.error('Error al cambiar categoría:', err);
     }
   };
@@ -156,7 +164,9 @@ export default function Transactions() {
     try {
       setUploadingInvoiceId(transactionId);
       await invoiceAPI.uploadInvoice(transactionId, file);
-      await loadTransactions();
+      setTransactions(txs => txs.map(t =>
+        t.id === transactionId ? { ...t, hasInvoice: true, invoices: [...(t.invoices || []), { id: 0, transactionId, url: '', fileName: file.name, createdAt: new Date().toISOString() }] } : t
+      ));
     } catch (err) {
       alert('Error al subir la factura');
       console.error('Error al subir factura:', err);
@@ -166,10 +176,14 @@ export default function Transactions() {
   };
 
   const handleInlineFixedToggle = async (transactionId: number, currentValue: boolean) => {
+    const prev = transactions.map(t => ({ ...t }));
+    setTransactions(txs => txs.map(t =>
+      t.id === transactionId ? { ...t, isFixed: !currentValue } : t
+    ));
     try {
       await transactionAPI.updateTransaction(transactionId, { isFixed: !currentValue });
-      await loadTransactions();
     } catch (err) {
+      setTransactions(prev);
       console.error('Error al cambiar tipo de gasto:', err);
     }
   };

@@ -1,4 +1,4 @@
-// Middleware de autenticación JWT (lee de httpOnly cookie, fallback a Authorization header)
+// Middleware de autenticación JWT (lee de httpOnly cookie)
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ACCESS_TOKEN_COOKIE } from '../lib/cookies';
@@ -19,8 +19,7 @@ interface JWTPayload {
 
 /**
  * Middleware que verifica que el usuario esté autenticado.
- * 1. Intenta leer el access_token de la cookie httpOnly
- * 2. Fallback: lee del header Authorization: Bearer <token>
+ * Lee el access_token de la cookie httpOnly
  */
 export const authMiddleware = (
   req: Request,
@@ -28,16 +27,8 @@ export const authMiddleware = (
   next: NextFunction
 ): void => {
   try {
-    // 1. Cookie httpOnly (método principal)
-    let token = req.cookies?.[ACCESS_TOKEN_COOKIE];
-
-    // 2. Fallback: Authorization header (compatibilidad durante migración)
-    if (!token) {
-      const authHeader = req.headers.authorization;
-      if (authHeader) {
-        token = authHeader.split(' ')[1];
-      }
-    }
+    // Cookie httpOnly (método único de autenticación)
+    const token = req.cookies?.[ACCESS_TOKEN_COOKIE];
 
     if (!token) {
       res.status(401).json({
@@ -52,7 +43,7 @@ export const authMiddleware = (
       throw new Error('JWT_SECRET no está configurado en las variables de entorno');
     }
 
-    const decoded = jwt.verify(token, secret) as JWTPayload;
+    const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTPayload;
     req.userId = decoded.userId;
     next();
   } catch (error) {

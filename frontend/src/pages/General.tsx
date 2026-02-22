@@ -1,18 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dashboardAPI, transactionAPI } from '../services/api';
+import { dashboardAPI } from '../services/api';
 import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import DonutChart from '../components/charts/DonutChart';
 import { formatCurrency, formatPercentage } from '../lib/formatters';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { Wallet, TrendingDown, BarChart3, AlertTriangle, CheckCircle2, Lock } from 'lucide-react';
-import type { DashboardStats, Transaction } from '../types';
+import type { DashboardStats } from '../types';
 
 export default function General() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -22,33 +21,14 @@ export default function General() {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      const [statsData, txData] = await Promise.all([
-        dashboardAPI.getStats(),
-        transactionAPI.listTransactions(undefined, 5000, 0),
-      ]);
+      const statsData = await dashboardAPI.getStats();
       setStats(statsData);
-      setTransactions(txData.transactions);
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Compute fixed expenses by category
-  const fixedByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-    let total = 0;
-    transactions.forEach(t => {
-      if (t.amount < 0 && t.isFixed) {
-        const amt = Math.abs(t.amount);
-        total += amt;
-        const cat = t.expenseCategory || 'SIN_CATEGORIA';
-        map[cat] = (map[cat] || 0) + amt;
-      }
-    });
-    return { map, total };
-  }, [transactions]);
 
   return (
     <div className="min-h-screen bg-amber-50/30">
@@ -175,19 +155,19 @@ export default function General() {
                 <Lock size={18} className="text-blue-500" />
                 <h3 className="text-lg font-semibold text-gray-800">Gastos Fijos por Categoría</h3>
                 <span className="ml-auto text-sm font-bold text-blue-600">
-                  Total: €{formatCurrency(fixedByCategory.total)}
+                  Total: €{formatCurrency(stats.totalFixed)}
                 </span>
               </div>
 
-              {fixedByCategory.total === 0 ? (
+              {stats.totalFixed === 0 ? (
                 <p className="text-gray-400 text-sm py-4 text-center">No hay gastos fijos registrados</p>
               ) : (
                 <div className="space-y-3">
-                  {Object.entries(fixedByCategory.map)
+                  {Object.entries(stats.fixedByCategory)
                     .sort(([, a], [, b]) => b - a)
                     .map(([catKey, amount]) => {
                       const cat = EXPENSE_CATEGORIES.find(c => c.key === catKey);
-                      const pct = fixedByCategory.total > 0 ? (amount / fixedByCategory.total) * 100 : 0;
+                      const pct = stats.totalFixed > 0 ? (amount / stats.totalFixed) * 100 : 0;
                       return (
                         <div key={catKey} className="flex items-center gap-3">
                           <div className="flex-1 min-w-0">

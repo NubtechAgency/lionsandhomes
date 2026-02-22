@@ -50,6 +50,9 @@ Lions-personal/
 nul
 task.md
 
+# Documentacion interna (no publicar)
+ARCHITECTURE.html
+
 # Misc
 *.tgz
 *.lock

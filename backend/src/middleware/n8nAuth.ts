@@ -19,8 +19,8 @@ export const n8nAuthMiddleware = (req: Request, res: Response, next: NextFunctio
     if (!expectedToken) {
       console.error('N8N_SYNC_TOKEN no está configurado en el archivo .env');
       res.status(500).json({
-        error: 'Configuration Error',
-        message: 'Token de n8n no configurado en el servidor',
+        error: 'Internal Server Error',
+        message: 'Error de configuración del servidor',
       });
       return;
     }

@@ -1,10 +1,8 @@
 // Controlador de gestión de transacciones
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { INVOICE_EXEMPT_CATEGORIES } from './projectController';
 import { logAudit, getClientIp } from '../services/auditLog';
-
-const prisma = new PrismaClient();
 
 /**
  * POST /api/transactions
@@ -25,9 +23,11 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
         });
         return;
       }
+      const projectIds = bodyAllocations.map((a: any) => a.projectId);
+      const foundProjects = await prisma.project.findMany({ where: { id: { in: projectIds } }, select: { id: true } });
+      const foundIds = new Set(foundProjects.map(p => p.id));
       for (const alloc of bodyAllocations) {
-        const p = await prisma.project.findUnique({ where: { id: alloc.projectId } });
-        if (!p) {
+        if (!foundIds.has(alloc.projectId)) {
           res.status(400).json({ error: 'Proyecto inválido', message: `El proyecto ${alloc.projectId} no existe` });
           return;
         }
@@ -68,54 +68,54 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
       ? bodyAllocations[0].projectId
       : (projectId || null);
 
-    const transaction = await prisma.transaction.create({
-      data: {
-        date: new Date(date),
-        amount,
-        concept,
-        category: 'Manual',
-        isManual: true,
-        projectId: effectiveProjectId,
-        expenseCategory: syncedCategory,
-        isFixed: syncedIsFixed,
-        notes: notes || null,
-      },
-    });
-
-    // Crear allocations en TransactionProject
-    if (bodyAllocations && Array.isArray(bodyAllocations) && bodyAllocations.length > 0) {
-      await prisma.transactionProject.createMany({
-        data: bodyAllocations.map((a: any) => ({
-          transactionId: transaction.id,
-          projectId: a.projectId,
-          amount: a.amount,
-        })),
-      });
-    } else if (projectId) {
-      await prisma.transactionProject.create({
+    const transaction = await prisma.$transaction(async (tx) => {
+      const txn = await tx.transaction.create({
         data: {
-          transactionId: transaction.id,
-          projectId,
+          date: new Date(date),
           amount,
+          concept,
+          category: 'Manual',
+          isManual: true,
+          projectId: effectiveProjectId,
+          expenseCategory: syncedCategory,
+          isFixed: syncedIsFixed,
+          notes: notes || null,
         },
       });
-    }
 
-    // Re-fetch con includes completos
-    const fullTransaction = await prisma.transaction.findUnique({
-      where: { id: transaction.id },
-      include: {
-        project: { select: { id: true, name: true } },
-        allocations: { include: { project: { select: { id: true, name: true } } } },
-        invoices: true,
-      },
+      if (bodyAllocations && Array.isArray(bodyAllocations) && bodyAllocations.length > 0) {
+        await tx.transactionProject.createMany({
+          data: bodyAllocations.map((a: any) => ({
+            transactionId: txn.id,
+            projectId: a.projectId,
+            amount: a.amount,
+          })),
+        });
+      } else if (projectId) {
+        await tx.transactionProject.create({
+          data: {
+            transactionId: txn.id,
+            projectId,
+            amount,
+          },
+        });
+      }
+
+      return tx.transaction.findUnique({
+        where: { id: txn.id },
+        include: {
+          project: { select: { id: true, name: true } },
+          allocations: { include: { project: { select: { id: true, name: true } } } },
+          invoices: true,
+        },
+      });
     });
 
-    await logAudit({ action: 'CREATE', entityType: 'Transaction', entityId: transaction.id, userId: req.userId, details: { amount, concept }, ipAddress: getClientIp(req) });
+    await logAudit({ action: 'CREATE', entityType: 'Transaction', entityId: transaction!.id, userId: req.userId, details: { amount, concept }, ipAddress: getClientIp(req) });
 
     res.status(201).json({
       message: 'Transacción manual creada exitosamente',
-      transaction: fullTransaction,
+      transaction,
     });
   } catch (error) {
     console.error('Error en createTransaction:', error);
@@ -401,74 +401,46 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       }
     }
 
-    // Manejar allocations (multi-proyecto)
-    if (bodyAllocations && Array.isArray(bodyAllocations)) {
-      if (bodyAllocations.length > 0) {
-        // Validar que todos los proyectos existen
-        for (const alloc of bodyAllocations) {
-          const p = await prisma.project.findUnique({ where: { id: alloc.projectId } });
-          if (!p) {
-            res.status(400).json({ error: 'Proyecto inválido', message: `El proyecto ${alloc.projectId} no existe` });
-            return;
+    // Manejar allocations + actualizar transacción atómicamente
+    const transaction = await prisma.$transaction(async (tx) => {
+      // Allocations
+      if (bodyAllocations && Array.isArray(bodyAllocations)) {
+        if (bodyAllocations.length > 0) {
+          // Validar que todos los proyectos existen
+          for (const alloc of bodyAllocations) {
+            const p = await tx.project.findUnique({ where: { id: alloc.projectId } });
+            if (!p) throw new Error(`INVALID_PROJECT:${alloc.projectId}`);
           }
-        }
-        // Validar suma = importe de la transacción
-        const txAmount = amount !== undefined ? amount : existingTransaction.amount;
-        const allocSum = bodyAllocations.reduce((s: number, a: any) => s + a.amount, 0);
-        if (Math.abs(allocSum - txAmount) > 0.01) {
-          res.status(400).json({
-            error: 'Suma incorrecta',
-            message: 'La suma de las asignaciones debe ser igual al importe de la transacción',
-          });
-          return;
-        }
-        // Reemplazar allocations atómicamente: borrar existentes + crear nuevas
-        await prisma.$transaction([
-          prisma.transactionProject.deleteMany({ where: { transactionId } }),
-          prisma.transactionProject.createMany({
-            data: bodyAllocations.map((a: any) => ({
-              transactionId,
-              projectId: a.projectId,
-              amount: a.amount,
-            })),
-          }),
-        ]);
-        // Denormalize: projectId = primer allocation
-        updateData.projectId = bodyAllocations[0].projectId;
-      } else {
-        // allocations = [] → quitar todas las asignaciones
-        await prisma.transactionProject.deleteMany({ where: { transactionId } });
-        updateData.projectId = null;
-      }
-    } else if (projectId !== undefined) {
-      // Inline dropdown: single project change
-      await prisma.transactionProject.deleteMany({ where: { transactionId } });
-      if (projectId !== null) {
-        const txAmount = amount !== undefined ? amount : existingTransaction.amount;
-        await prisma.transactionProject.create({
-          data: { transactionId, projectId, amount: txAmount },
-        });
-      }
-    }
+          const txAmount = amount !== undefined ? amount : existingTransaction.amount;
+          const allocSum = bodyAllocations.reduce((s: number, a: any) => s + a.amount, 0);
+          if (Math.abs(allocSum - txAmount) > 0.01) throw new Error('ALLOC_SUM_MISMATCH');
 
-    // 💾 Actualizar la transacción en la BD
-    const transaction = await prisma.transaction.update({
-      where: { id: transactionId },
-      data: updateData,
-      include: {
-        project: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        allocations: {
-          include: {
-            project: { select: { id: true, name: true } }
-          }
-        },
-        invoices: true,
+          await tx.transactionProject.deleteMany({ where: { transactionId } });
+          await tx.transactionProject.createMany({
+            data: bodyAllocations.map((a: any) => ({ transactionId, projectId: a.projectId, amount: a.amount })),
+          });
+          updateData.projectId = bodyAllocations[0].projectId;
+        } else {
+          await tx.transactionProject.deleteMany({ where: { transactionId } });
+          updateData.projectId = null;
+        }
+      } else if (projectId !== undefined) {
+        await tx.transactionProject.deleteMany({ where: { transactionId } });
+        if (projectId !== null) {
+          const txAmount = amount !== undefined ? amount : existingTransaction.amount;
+          await tx.transactionProject.create({ data: { transactionId, projectId, amount: txAmount } });
+        }
       }
+
+      return tx.transaction.update({
+        where: { id: transactionId },
+        data: updateData,
+        include: {
+          project: { select: { id: true, name: true } },
+          allocations: { include: { project: { select: { id: true, name: true } } } },
+          invoices: true,
+        },
+      });
     });
 
     // 🔄 Auto-sync: actualizar transacciones con el mismo concepto (solo isFixed y expenseCategory)
@@ -484,6 +456,7 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
         where: {
           concept: existingTransaction.concept,
           id: { not: transactionId },
+          isArchived: false,
         },
       });
 
@@ -492,6 +465,7 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
           where: {
             concept: existingTransaction.concept,
             id: { not: transactionId },
+            isArchived: false,
           },
           data: syncData,
         });
@@ -510,7 +484,16 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
       transaction,
       syncedCount,
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message?.startsWith('INVALID_PROJECT:')) {
+      const pid = error.message.split(':')[1];
+      res.status(400).json({ error: 'Proyecto inválido', message: `El proyecto ${pid} no existe` });
+      return;
+    }
+    if (error?.message === 'ALLOC_SUM_MISMATCH') {
+      res.status(400).json({ error: 'Suma incorrecta', message: 'La suma de las asignaciones debe ser igual al importe de la transacción' });
+      return;
+    }
     console.error('Error en updateTransaction:', error);
     res.status(500).json({
       error: 'Error del servidor',

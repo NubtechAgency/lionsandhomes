@@ -62,7 +62,12 @@ export async function uploadFileToR2(key: string, body: Buffer, contentType: str
 
 export function generateInvoiceKey(transactionId: number, fileName: string): string {
   const timestamp = Date.now();
-  // Sanitizar el nombre del archivo (eliminar caracteres especiales)
   const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
   return `invoices/${transactionId}-${timestamp}-${sanitizedFileName}`;
+}
+
+export function generateOrphanInvoiceKey(fileName: string): string {
+  const timestamp = Date.now();
+  const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+  return `orphans/${timestamp}-${sanitizedFileName}`;
 }

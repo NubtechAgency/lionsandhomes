@@ -104,12 +104,63 @@ export interface UpdateProjectData {
 // TIPOS DE TRANSACCIONES
 // ========================================
 
+export type OcrStatus = 'NONE' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'BUDGET_EXCEEDED';
+
 export interface Invoice {
   id: number;
-  transactionId: number;
+  transactionId: number | null;
   url: string;
   fileName: string;
+  ocrStatus?: OcrStatus;
+  ocrAmount?: number | null;
+  ocrDate?: string | null;
+  ocrVendor?: string | null;
+  ocrInvoiceNumber?: string | null;
+  ocrError?: string | null;
+  ocrCostCents?: number | null;
   createdAt: string;
+}
+
+export interface OrphanInvoice {
+  id: number;
+  transactionId: null;
+  fileName: string;
+  downloadUrl: string;
+  ocrStatus: OcrStatus;
+  ocrAmount: number | null;
+  ocrDate: string | null;
+  ocrVendor: string | null;
+  ocrInvoiceNumber: string | null;
+  ocrError: string | null;
+  ocrCostCents: number | null;
+  createdAt: string;
+}
+
+export interface MatchSuggestion {
+  transactionId: number;
+  concept: string;
+  amount: number;
+  date: string;
+  score: number;
+  projectName: string | null;
+}
+
+export interface BulkUploadResult {
+  fileName: string;
+  status: 'COMPLETED' | 'FAILED' | 'BUDGET_EXCEEDED' | 'INVALID';
+  error?: string;
+  invoice: Invoice | null;
+  suggestions: MatchSuggestion[];
+}
+
+export interface OcrBudgetStatus {
+  spentCents: number;
+  budgetCents: number;
+  remainingCents: number;
+  allowed: boolean;
+  callCount: number;
+  avgCostCents: number;
+  month: string;
 }
 
 export interface TransactionAllocation {
@@ -231,5 +282,8 @@ export interface DashboardStats {
   categoryStats: CategoryStat[];
   recentTransactions: Transaction[];
   budgetAlerts: BudgetAlert[];
+  totalFixed: number;
+  totalVariable: number;
+  fixedByCategory: Record<string, number>;
   filteredByProject: string | null;
 }

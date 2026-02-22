@@ -249,8 +249,10 @@ export default function TransactionEditModal({ transaction, projects, isOpen, on
       setDeletingInvoiceId(invoiceId);
       setUploadError(null);
       const { transaction: updated } = await invoiceAPI.deleteInvoice(invoiceId);
-      setHasInvoice(updated.hasInvoice);
-      setInvoiceCount(updated.invoices?.length || 0);
+      if (updated) {
+        setHasInvoice(updated.hasInvoice);
+        setInvoiceCount(updated.invoices?.length || 0);
+      }
       setInvoicesWithUrls(prev => prev.filter(inv => inv.id !== invoiceId));
     } catch (err: any) {
       setUploadError(err.message || 'Error al eliminar la factura');

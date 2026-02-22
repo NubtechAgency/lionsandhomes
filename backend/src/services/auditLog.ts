@@ -1,8 +1,6 @@
 // Servicio de audit logging — registra acciones para trazabilidad
-import { PrismaClient } from '@prisma/client';
 import { Request } from 'express';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 interface AuditEntry {
   action: string;

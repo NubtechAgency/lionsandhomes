@@ -94,19 +94,51 @@ model Transaction {
   @@index([isManual])
   @@index([isArchived])
   @@index([isFixed])
+  @@index([isArchived, date])
+  @@index([isArchived, amount])
+  @@index([isArchived, expenseCategory, amount])
 }
 
 // Facturas adjuntas a transacciones (una transacción puede tener múltiples facturas)
+// transactionId nullable = factura huérfana (subida sin transacción asignada)
 model Invoice {
-  id            Int      @id @default(autoincrement())
-  transactionId Int
-  url           String   // Key de R2 (ej: invoices/123-1234567890-factura.pdf)
-  fileName      String   // Nombre original del archivo
-  createdAt     DateTime @default(now())
+  id               Int       @id @default(autoincrement())
+  transactionId    Int?      // NULL = huérfana (aún no vinculada a transacción)
+  url              String    // Key de R2 (ej: invoices/123-1234567890-factura.pdf)
+  fileName         String    // Nombre original del archivo
 
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  // Datos extraídos por OCR (Claude Vision)
+  ocrStatus        String    @default("NONE") // NONE, PENDING, PROCESSING, COMPLETED, FAILED, BUDGET_EXCEEDED
+  ocrAmount        Float?    // Importe extraído
+  ocrDate          DateTime? // Fecha extraída
+  ocrVendor        String?   // Proveedor/empresa extraída (max 500 chars)
+  ocrInvoiceNumber String?   // Número de factura extraído (max 200 chars)
+  ocrRawResponse   String?   // Respuesta completa de Claude (debug, NO exponer al frontend)
+  ocrError         String?   // Mensaje de error si OCR falló
+  ocrTokensUsed    Int?      // Tokens totales consumidos (input + output)
+  ocrCostCents     Int?      // Coste estimado en centavos (entero, sin floats)
+
+  createdAt        DateTime  @default(now())
+
+  transaction      Transaction? @relation(fields: [transactionId], references: [id])
 
   @@index([transactionId])
+  @@index([ocrStatus])
+}
+
+// Registro de uso de OCR para control de presupuesto
+model OcrUsage {
+  id           Int      @id @default(autoincrement())
+  invoiceId    Int      // Factura que generó esta llamada OCR
+  userId       Int      // Usuario que inició la operación
+  tokensInput  Int      // Tokens de entrada consumidos
+  tokensOutput Int      // Tokens de salida consumidos
+  costCents    Int      // Coste en centavos (entero, Math.ceil)
+  model        String   // Modelo usado (ej: claude-sonnet-4-20250514)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
 }
 
 // Asignación de transacciones a proyectos (multi-proyecto con importe)

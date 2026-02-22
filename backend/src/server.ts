@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import prisma from './lib/prisma';
 
 // Importar rutas
 import authRoutes from './routes/auth';
@@ -18,8 +18,6 @@ import invoiceRoutes from './routes/invoices';
 
 // Cargar variables de entorno
 dotenv.config();
-
-const prisma = new PrismaClient();
 
 // Validar variables de entorno requeridas al arrancar
 const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
@@ -38,6 +36,10 @@ if (process.env.NODE_ENV === 'production' && (process.env.JWT_SECRET || '').leng
 
 const app: Application = express();
 const PORT = process.env.PORT || 8000;
+
+// Trust proxy (Traefik) — necesario para que req.ip devuelva la IP real del cliente
+// Sin esto, rate limiting y audit logs usan la IP del proxy, no la del usuario
+app.set('trust proxy', 1);
 
 // ========================================
 // MIDDLEWARES GLOBALES
@@ -103,6 +105,22 @@ const invoiceUploadLimiter = rateLimit({
   message: { error: 'Too Many Requests', message: 'Demasiadas subidas de factura' },
 });
 
+const bulkUploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas subidas masivas de facturas' },
+});
+
+const ocrBudgetLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas consultas al presupuesto OCR' },
+});
+
 const syncLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
@@ -154,6 +172,8 @@ app.use('/api/auth/refresh', refreshLimiter);
 app.use('/api/dashboard/stats', dashboardLimiter);
 app.use('/api/transactions/check-duplicates', checkDuplicatesLimiter);
 app.use('/api/invoices/upload', invoiceUploadLimiter);
+app.use('/api/invoices/bulk-upload', bulkUploadLimiter);
+app.use('/api/invoices/ocr-budget', ocrBudgetLimiter);
 app.use('/api/sync/transactions', syncLimiter);
 
 // Rutas de la API
@@ -169,10 +189,10 @@ app.use('/api/invoices', invoiceRoutes);
 // ========================================
 
 // Ruta no encontrada (404)
-app.use((req: Request, res: Response) => {
+app.use((_req: Request, res: Response) => {
   res.status(404).json({
     error: 'Not Found',
-    message: `La ruta ${req.method} ${req.url} no existe`
+    message: 'La ruta solicitada no existe'
   });
 });
 
