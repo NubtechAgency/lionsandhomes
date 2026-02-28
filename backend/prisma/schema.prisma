@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -51,7 +51,6 @@ model Project {
 
   transactions     Transaction[]
   allocations      TransactionProject[]
-  cashFlowEntries  CashFlowEntry[]
 
   @@index([status])
 }
@@ -171,27 +170,6 @@ model AuditLog {
   @@index([action])
   @@index([userId])
   @@index([createdAt])
-}
-
-// Previsiones de flujo de caja (cobros y pagos planificados, independientes de transacciones)
-model CashFlowEntry {
-  id          Int      @id @default(autoincrement())
-  type        String   // "INCOME" (cobro) o "EXPENSE" (pago)
-  description String
-  amount      Float    // Siempre positivo, el tipo determina el signo
-  date        DateTime
-  category    String?  // Categoría de gasto (solo para EXPENSE)
-  projectId   Int?
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  project     Project? @relation(fields: [projectId], references: [id])
-
-  @@index([type])
-  @@index([date])
-  @@index([projectId])
-  @@index([category])
 }
 
 // Categorias de gasto de Lions
