@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Upload, X, FileText, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Upload, X, FileText, CheckCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { invoiceAPI } from '../services/api';
 import { formatCurrency } from '../lib/formatters';
 import type { BulkUploadResult, OcrBudgetStatus } from '../types';
@@ -11,6 +11,7 @@ interface BulkUploadZoneProps {
 }
 
 const MAX_FILES = 10;
+const MAX_HINTS_LENGTH = 1000;
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdate }: BulkUploadZoneProps) {
@@ -19,6 +20,8 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
   const [results, setResults] = useState<BulkUploadResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showHints, setShowHints] = useState(false);
+  const [ocrHints, setOcrHints] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -61,7 +64,7 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
     setResults(null);
 
     try {
-      const response = await invoiceAPI.bulkUpload(selectedFiles);
+      const response = await invoiceAPI.bulkUpload(selectedFiles, ocrHints || undefined);
       setResults(response.results);
       onBudgetUpdate(response.budget);
       setSelectedFiles([]);
@@ -108,6 +111,30 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
           onChange={(e) => e.target.files && addFiles(e.target.files)}
           className="hidden"
         />
+      </div>
+
+      {/* OCR Hints (collapsible) */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowHints(!showHints)}
+          className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+        >
+          <span>Instrucciones OCR personalizadas {ocrHints.trim() && '(activas)'}</span>
+          {showHints ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+        {showHints && (
+          <div className="px-3 pb-3 space-y-1">
+            <textarea
+              value={ocrHints}
+              onChange={(e) => setOcrHints(e.target.value.slice(0, MAX_HINTS_LENGTH))}
+              placeholder={'Ej: "El total esta abajo a la derecha con IVA incluido", "Ignorar el deposito previo", "La fecha de compra esta arriba"...'}
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 resize-none"
+            />
+            <p className="text-xs text-gray-400 text-right">{ocrHints.length}/{MAX_HINTS_LENGTH}</p>
+          </div>
+        )}
       </div>
 
       {/* Selected files list */}

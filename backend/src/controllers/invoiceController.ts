@@ -286,6 +286,7 @@ export async function bulkUploadInvoices(req: Request, res: Response): Promise<v
     }
 
     const ocrModel = process.env.OCR_MODEL || 'claude-sonnet-4-20250514';
+    const ocrHints = typeof req.body.ocrHints === 'string' ? req.body.ocrHints.slice(0, 1000) : undefined;
     const results: any[] = [];
 
     for (const file of files) {
@@ -355,7 +356,7 @@ export async function bulkUploadInvoices(req: Request, res: Response): Promise<v
           }
 
           // Llamar OCR
-          const result = await extractInvoiceData(file.buffer, file.mimetype, file.originalname);
+          const result = await extractInvoiceData(file.buffer, file.mimetype, file.originalname, ocrHints);
           const costCents = estimateCostCents(result.tokensInput, result.tokensOutput);
 
           // Actualizar invoice con datos OCR
@@ -366,7 +367,6 @@ export async function bulkUploadInvoices(req: Request, res: Response): Promise<v
               ocrAmount: result.amount,
               ocrDate: result.date ? new Date(result.date) : null,
               ocrVendor: result.vendor,
-              ocrInvoiceNumber: result.invoiceNumber,
               ocrRawResponse: result.rawResponse,
               ocrTokensUsed: result.tokensInput + result.tokensOutput,
               ocrCostCents: costCents,
@@ -497,7 +497,6 @@ export async function listOrphanInvoices(req: Request, res: Response): Promise<v
         ocrAmount: inv.ocrAmount,
         ocrDate: inv.ocrDate,
         ocrVendor: inv.ocrVendor,
-        ocrInvoiceNumber: inv.ocrInvoiceNumber,
         ocrError: inv.ocrError,
         ocrCostCents: inv.ocrCostCents,
         createdAt: inv.createdAt,
@@ -628,13 +627,12 @@ export async function updateOcrData(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { ocrAmount, ocrDate, ocrVendor, ocrInvoiceNumber } = req.body;
+    const { ocrAmount, ocrDate, ocrVendor } = req.body;
 
     const updateData: any = {};
     if (ocrAmount !== undefined) updateData.ocrAmount = ocrAmount;
     if (ocrDate !== undefined) updateData.ocrDate = new Date(ocrDate);
     if (ocrVendor !== undefined) updateData.ocrVendor = ocrVendor.slice(0, 500);
-    if (ocrInvoiceNumber !== undefined) updateData.ocrInvoiceNumber = ocrInvoiceNumber.slice(0, 200);
 
     const updatedInvoice = await prisma.invoice.update({
       where: { id: invoiceId },

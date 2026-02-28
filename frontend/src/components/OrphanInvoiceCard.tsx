@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Check, X, Edit3, Save, Search, FileText, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
-import { invoiceAPI, transactionAPI } from '../services/api';
+import { invoiceAPI } from '../services/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import type { OrphanInvoice, MatchSuggestion, Transaction, OcrStatus } from '../types';
+import TransactionSearchModal from './TransactionSearchModal';
+import type { OrphanInvoice, MatchSuggestion, OcrStatus } from '../types';
 
 interface OrphanInvoiceCardProps {
   invoice: OrphanInvoice;
@@ -27,17 +28,11 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
     ocrAmount: invoice.ocrAmount ?? undefined as number | undefined,
     ocrDate: invoice.ocrDate ? invoice.ocrDate.split('T')[0] : '',
     ocrVendor: invoice.ocrVendor ?? '',
-    ocrInvoiceNumber: invoice.ocrInvoiceNumber ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [linking, setLinking] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  // Manual search
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Transaction[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const loadSuggestions = async () => {
     if (invoice.ocrStatus !== 'COMPLETED') return;
@@ -63,7 +58,6 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
       if (editData.ocrAmount !== undefined) data.ocrAmount = editData.ocrAmount;
       if (editData.ocrDate) data.ocrDate = editData.ocrDate;
       if (editData.ocrVendor) data.ocrVendor = editData.ocrVendor;
-      if (editData.ocrInvoiceNumber) data.ocrInvoiceNumber = editData.ocrInvoiceNumber;
 
       const res = await invoiceAPI.updateOcrData(invoice.id, data);
       setSuggestions(res.suggestions);
@@ -79,6 +73,7 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
     setLinking(transactionId);
     try {
       await invoiceAPI.linkToTransaction(invoice.id, transactionId);
+      setShowSearchModal(false);
       onLinked();
     } catch (err) {
       console.error('Error linking invoice:', err);
@@ -97,23 +92,6 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
       console.error('Error deleting invoice:', err);
     } finally {
       setDeleting(false);
-    }
-  };
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setSearching(true);
-    try {
-      const res = await transactionAPI.listTransactions(
-        { search: searchQuery, isArchived: 'false' },
-        20,
-        0
-      );
-      setSearchResults(res.transactions);
-    } catch (err) {
-      console.error('Error searching:', err);
-    } finally {
-      setSearching(false);
     }
   };
 
@@ -184,7 +162,7 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
           </div>
 
           {isEditing ? (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="text-xs text-gray-500">Importe</label>
                 <input
@@ -213,18 +191,9 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
                   className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-amber-500"
                 />
               </div>
-              <div>
-                <label className="text-xs text-gray-500">N. Factura</label>
-                <input
-                  type="text"
-                  value={editData.ocrInvoiceNumber}
-                  onChange={e => setEditData(d => ({ ...d, ocrInvoiceNumber: e.target.value }))}
-                  className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
               <div>
                 <span className="text-gray-400 text-xs">Importe:</span>{' '}
                 <span className="text-gray-800 font-medium">
@@ -238,10 +207,6 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
               <div>
                 <span className="text-gray-400 text-xs">Proveedor:</span>{' '}
                 <span className="text-gray-800">{invoice.ocrVendor || '—'}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 text-xs">N. Factura:</span>{' '}
-                <span className="text-gray-800">{invoice.ocrInvoiceNumber || '—'}</span>
               </div>
             </div>
           )}
@@ -309,73 +274,25 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
         </div>
       )}
 
-      {/* Manual search */}
-      <div className="space-y-2">
-        {!showSearch ? (
-          <button
-            onClick={() => setShowSearch(true)}
-            className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
-          >
-            <Search size={12} /> Buscar transaccion manualmente
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Buscar por concepto, importe..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500"
-              />
-              <button
-                onClick={handleSearch}
-                disabled={searching}
-                className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm hover:bg-amber-200 disabled:opacity-50"
-              >
-                {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-              </button>
-              <button
-                onClick={() => { setShowSearch(false); setSearchResults([]); setSearchQuery(''); }}
-                className="px-2 py-1.5 text-gray-400 hover:text-gray-600"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            {searchResults.length > 0 && (
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {searchResults.map(t => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-800 truncate">{t.concept}</p>
-                      <p className="text-xs text-gray-400">
-                        {formatCurrency(Math.abs(t.amount))} · {formatDate(t.date)}
-                        {t.project?.name && ` · ${t.project.name}`}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleLink(t.id)}
-                      disabled={linking !== null}
-                      className="p-1 text-green-500 hover:text-green-700 hover:bg-green-50 rounded disabled:opacity-50 flex-shrink-0"
-                      title="Vincular"
-                    >
-                      {linking === t.id ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        <Check size={16} />
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Manual search button → opens modal */}
+      <button
+        onClick={() => setShowSearchModal(true)}
+        className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
+      >
+        <Search size={12} /> Buscar transaccion manualmente
+      </button>
+
+      {showSearchModal && (
+        <TransactionSearchModal
+          isOpen={showSearchModal}
+          onClose={() => setShowSearchModal(false)}
+          onLink={handleLink}
+          linking={linking}
+          initialSearch={invoice.ocrVendor || undefined}
+          initialAmount={invoice.ocrAmount || undefined}
+          initialDate={invoice.ocrDate?.split('T')[0] || undefined}
+        />
+      )}
 
       {/* Delete button */}
       <div className="pt-1 border-t border-gray-50">

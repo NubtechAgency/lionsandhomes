@@ -29,5 +29,4 @@ export const updateOcrDataSchema = z.object({
   ocrAmount: z.number().positive().optional(),
   ocrDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha: YYYY-MM-DD').optional(),
   ocrVendor: z.string().max(500).optional(),
-  ocrInvoiceNumber: z.string().max(200).optional(),
 });

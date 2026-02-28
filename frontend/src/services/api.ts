@@ -20,6 +20,11 @@ import type {
   BulkUploadResult,
   OcrBudgetStatus,
   OcrStatus,
+  CashFlowEntry,
+  CashFlowFilters,
+  CashFlowSummaryMonth,
+  CreateCashFlowData,
+  UpdateCashFlowData,
 } from '../types';
 
 // En dev usa Vite proxy (mismo origen), en prod usa VITE_API_URL
@@ -354,10 +359,12 @@ export const invoiceAPI = {
    * Subida masiva de facturas con OCR automático (hasta 10 archivos)
    */
   bulkUpload: async (
-    files: File[]
+    files: File[],
+    ocrHints?: string
   ): Promise<{ results: BulkUploadResult[]; budget: OcrBudgetStatus }> => {
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
+    if (ocrHints?.trim()) formData.append('ocrHints', ocrHints.trim());
 
     const response = await fetch(`${API_URL}/api/invoices/bulk-upload`, {
       method: 'POST',
@@ -436,10 +443,73 @@ export const invoiceAPI = {
   },
 };
 
+// ========================================
+// FLUJO DE CAJA
+// ========================================
+
+export const cashFlowAPI = {
+  create: async (data: CreateCashFlowData): Promise<{ message: string; entry: CashFlowEntry }> => {
+    return fetchAPI<{ message: string; entry: CashFlowEntry }>('/api/cashflow', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  list: async (
+    filters?: CashFlowFilters,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<{
+    entries: CashFlowEntry[];
+    pagination: TransactionPagination;
+    stats: { totalIncome: number; totalExpense: number; net: number };
+  }> => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.projectId) params.append('projectId', filters.projectId.toString());
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
+    if (filters?.dateTo) params.append('dateTo', filters.dateTo);
+    if (filters?.sortBy) params.append('sortBy', filters.sortBy);
+    if (filters?.sortOrder) params.append('sortOrder', filters.sortOrder);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    const qs = params.toString();
+    return fetchAPI(`/api/cashflow${qs ? `?${qs}` : ''}`);
+  },
+
+  summary: async (filters?: CashFlowFilters): Promise<{ months: CashFlowSummaryMonth[] }> => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.projectId) params.append('projectId', filters.projectId.toString());
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
+    if (filters?.dateTo) params.append('dateTo', filters.dateTo);
+    const qs = params.toString();
+    return fetchAPI(`/api/cashflow/summary${qs ? `?${qs}` : ''}`);
+  },
+
+  get: async (id: number): Promise<{ entry: CashFlowEntry }> => {
+    return fetchAPI(`/api/cashflow/${id}`);
+  },
+
+  update: async (id: number, data: UpdateCashFlowData): Promise<{ message: string; entry: CashFlowEntry }> => {
+    return fetchAPI(`/api/cashflow/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: async (id: number): Promise<{ message: string }> => {
+    return fetchAPI(`/api/cashflow/${id}`, { method: 'DELETE' });
+  },
+};
+
 export default {
   auth: authAPI,
   projects: projectAPI,
   transactions: transactionAPI,
   dashboard: dashboardAPI,
   invoices: invoiceAPI,
+  cashFlow: cashFlowAPI,
 };

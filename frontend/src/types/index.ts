@@ -115,7 +115,6 @@ export interface Invoice {
   ocrAmount?: number | null;
   ocrDate?: string | null;
   ocrVendor?: string | null;
-  ocrInvoiceNumber?: string | null;
   ocrError?: string | null;
   ocrCostCents?: number | null;
   createdAt: string;
@@ -241,6 +240,67 @@ export interface TransactionPagination {
   limit: number;
   offset: number;
   hasMore: boolean;
+}
+
+// ========================================
+// TIPOS DE FLUJO DE CAJA
+// ========================================
+
+export type CashFlowType = 'INCOME' | 'EXPENSE';
+
+export interface CashFlowEntry {
+  id: number;
+  type: CashFlowType;
+  description: string;
+  amount: number;
+  date: string;
+  category: ExpenseCategory | null;
+  projectId: number | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: {
+    id: number;
+    name: string;
+  };
+}
+
+export interface CashFlowFilters {
+  type?: CashFlowType;
+  projectId?: number;
+  category?: ExpenseCategory;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: 'date' | 'amount' | 'description';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface CashFlowSummaryMonth {
+  month: string;
+  income: number;
+  expense: number;
+  net: number;
+  cumulative: number;
+}
+
+export interface CreateCashFlowData {
+  type: CashFlowType;
+  description: string;
+  amount: number;
+  date: string;
+  category?: ExpenseCategory | null;
+  projectId?: number | null;
+  notes?: string | null;
+}
+
+export interface UpdateCashFlowData {
+  type?: CashFlowType;
+  description?: string;
+  amount?: number;
+  date?: string;
+  category?: ExpenseCategory | null;
+  projectId?: number | null;
+  notes?: string | null;
 }
 
 // ========================================
