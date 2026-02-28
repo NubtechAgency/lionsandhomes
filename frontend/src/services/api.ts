@@ -414,7 +414,7 @@ export const invoiceAPI = {
    */
   updateOcrData: async (
     invoiceId: number,
-    data: { ocrAmount?: number; ocrDate?: string; ocrVendor?: string; ocrInvoiceNumber?: string }
+    data: { ocrAmount?: number; ocrDate?: string; ocrVendor?: string }
   ): Promise<{ invoice: OrphanInvoice; suggestions: MatchSuggestion[] }> => {
     return fetchAPI(`/api/invoices/${invoiceId}/ocr`, {
       method: 'PATCH',

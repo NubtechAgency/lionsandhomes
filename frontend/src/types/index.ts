@@ -129,7 +129,6 @@ export interface OrphanInvoice {
   ocrAmount: number | null;
   ocrDate: string | null;
   ocrVendor: string | null;
-  ocrInvoiceNumber: string | null;
   ocrError: string | null;
   ocrCostCents: number | null;
   createdAt: string;
@@ -137,11 +136,23 @@ export interface OrphanInvoice {
 
 export interface MatchSuggestion {
   transactionId: number;
-  concept: string;
-  amount: number;
-  date: string;
   score: number;
-  projectName: string | null;
+  scoreBreakdown: {
+    amountScore: number;
+    dateScore: number;
+    conceptScore: number;
+  };
+  transaction: {
+    id: number;
+    date: string;
+    amount: number;
+    concept: string;
+    hasInvoice: boolean;
+    projectId: number | null;
+    expenseCategory: string | null;
+    notes: string | null;
+    project: { id: number; name: string } | null;
+  };
 }
 
 export interface BulkUploadResult {

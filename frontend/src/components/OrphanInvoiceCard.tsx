@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Check, X, Edit3, Save, Search, FileText, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { Check, X, Edit3, Save, Search, FileText, ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { invoiceAPI } from '../services/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
+import { EXPENSE_CATEGORIES } from '../lib/constants';
 import TransactionSearchModal from './TransactionSearchModal';
 import type { OrphanInvoice, MatchSuggestion, OcrStatus } from '../types';
 
@@ -33,6 +34,12 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
   const [linking, setLinking] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null);
+
+  const getCategoryLabel = (key: string | null) => {
+    if (!key) return null;
+    return EXPENSE_CATEGORIES.find(c => c.key === key)?.label || key;
+  };
 
   const loadSuggestions = async () => {
     if (invoice.ocrStatus !== 'COMPLETED') return;
@@ -237,37 +244,94 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
               <Loader2 size={14} className="animate-spin" /> Buscando coincidencias...
             </div>
           ) : suggestions.length > 0 ? (
-            suggestions.map(s => (
-              <div
-                key={s.transactionId}
-                className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-gray-800 truncate">{s.concept}</p>
-                  <p className="text-xs text-gray-400">
-                    {formatCurrency(Math.abs(s.amount))} · {formatDate(s.date)}
-                    {s.projectName && ` · ${s.projectName}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${scoreColor(s.score)}`}>
-                    {s.score}
-                  </span>
-                  <button
-                    onClick={() => handleLink(s.transactionId)}
-                    disabled={linking !== null}
-                    className="p-1 text-green-500 hover:text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
-                    title="Confirmar"
+            suggestions.map(s => {
+              const tx = s.transaction;
+              const isExpanded = expandedSuggestion === s.transactionId;
+              return (
+                <div key={s.transactionId} className="bg-gray-50 rounded-lg overflow-hidden">
+                  {/* Summary row (clickable) */}
+                  <div
+                    className="flex items-center justify-between gap-2 p-2 cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpandedSuggestion(isExpanded ? null : s.transactionId)}
                   >
-                    {linking === s.transactionId ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Check size={16} />
-                    )}
-                  </button>
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      {isExpanded ? <ChevronUp size={14} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />}
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-800 truncate">{tx.concept}</p>
+                        <p className="text-xs text-gray-400">
+                          {formatCurrency(Math.abs(tx.amount))} · {formatDate(tx.date)}
+                          {tx.project && ` · ${tx.project.name}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${scoreColor(s.score)}`}>
+                        {s.score}
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleLink(s.transactionId); }}
+                        disabled={linking !== null}
+                        className="p-1 text-green-500 hover:text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
+                        title="Vincular"
+                      >
+                        {linking === s.transactionId ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Check size={16} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 pt-1 border-t border-gray-100 space-y-2">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                        <div>
+                          <span className="text-gray-400">Concepto:</span>{' '}
+                          <span className="text-gray-700">{tx.concept}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Importe:</span>{' '}
+                          <span className="text-gray-700 font-medium">{formatCurrency(Math.abs(tx.amount))}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Fecha:</span>{' '}
+                          <span className="text-gray-700">{formatDate(tx.date)}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Proyecto:</span>{' '}
+                          <span className="text-gray-700">{tx.project?.name || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Categoria:</span>{' '}
+                          <span className="text-gray-700">{getCategoryLabel(tx.expenseCategory) || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Factura:</span>{' '}
+                          <span className={tx.hasInvoice ? 'text-green-600' : 'text-amber-600'}>
+                            {tx.hasInvoice ? 'Si' : 'No'}
+                          </span>
+                        </div>
+                        {tx.notes && (
+                          <div className="col-span-2">
+                            <span className="text-gray-400">Notas:</span>{' '}
+                            <span className="text-gray-700">{tx.notes}</span>
+                          </div>
+                        )}
+                      </div>
+                      {/* Score breakdown */}
+                      <div className="flex items-center gap-3 text-xs text-gray-400 pt-1 border-t border-gray-100">
+                        <span>Puntuacion:</span>
+                        <span>Importe <b className="text-gray-600">{s.scoreBreakdown.amountScore}</b>/40</span>
+                        <span>Fecha <b className="text-gray-600">{s.scoreBreakdown.dateScore}</b>/30</span>
+                        <span>Concepto <b className="text-gray-600">{s.scoreBreakdown.conceptScore}</b>/30</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="text-xs text-gray-400 py-1">Sin coincidencias encontradas</p>
           )}

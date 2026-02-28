@@ -16,6 +16,8 @@ export interface MatchSuggestion {
     concept: string;
     hasInvoice: boolean;
     projectId: number | null;
+    expenseCategory: string | null;
+    notes: string | null;
     project: { id: number; name: string } | null;
   };
 }
@@ -75,6 +77,8 @@ export async function findMatches(
       concept: true,
       hasInvoice: true,
       projectId: true,
+      expenseCategory: true,
+      notes: true,
       project: { select: { id: true, name: true } },
     },
   });
@@ -103,6 +107,8 @@ export async function findMatches(
         concept: tx.concept,
         hasInvoice: tx.hasInvoice,
         projectId: tx.projectId,
+        expenseCategory: tx.expenseCategory,
+        notes: tx.notes,
         project: tx.project,
       },
     };
