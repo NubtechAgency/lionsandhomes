@@ -51,6 +51,7 @@ model Project {
 
   transactions     Transaction[]
   allocations      TransactionProject[]
+  cashFlowEntries  CashFlowEntry[]
 
   @@index([status])
 }
@@ -170,6 +171,27 @@ model AuditLog {
   @@index([action])
   @@index([userId])
   @@index([createdAt])
+}
+
+// Previsiones de flujo de caja (cobros y pagos futuros)
+model CashFlowEntry {
+  id          Int      @id @default(autoincrement())
+  type        String   // "INCOME" o "EXPENSE"
+  description String
+  amount      Float    // Siempre positivo
+  date        DateTime
+  category    String?  // Una de las 8 categorías (nullable para INCOME)
+  projectId   Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project? @relation(fields: [projectId], references: [id])
+
+  @@index([type])
+  @@index([date])
+  @@index([projectId])
+  @@index([category])
 }
 
 // Categorias de gasto de Lions

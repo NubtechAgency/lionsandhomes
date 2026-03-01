@@ -9,6 +9,7 @@ import ProjectDetail from './pages/ProjectDetail';
 import Transactions from './pages/Transactions';
 import Invoices from './pages/Invoices';
 import General from './pages/General';
+import CashFlow from './pages/CashFlow';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -55,6 +56,7 @@ function App() {
           <Route path="/projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
           <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
+          <Route path="/cashflow" element={<ProtectedRoute><CashFlow /></ProtectedRoute>} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route

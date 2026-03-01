@@ -17,3 +17,6 @@ export const INVOICE_EXEMPT_CATEGORIES: readonly ExpenseCategory[] = ['SUELDOS',
 
 export const PROJECT_STATUSES = ['ACTIVE', 'COMPLETED', 'ARCHIVED'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const CASH_FLOW_TYPES = ['INCOME', 'EXPENSE'] as const;
+export type CashFlowType = (typeof CASH_FLOW_TYPES)[number];

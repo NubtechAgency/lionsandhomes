@@ -15,6 +15,7 @@ import syncRoutes from './routes/sync';
 import transactionRoutes from './routes/transactions';
 import dashboardRoutes from './routes/dashboard';
 import invoiceRoutes from './routes/invoices';
+import cashflowRoutes from './routes/cashflow';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -183,6 +184,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/cashflow', cashflowRoutes);
 
 // ========================================
 // MANEJO DE ERRORES

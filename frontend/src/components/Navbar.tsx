@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Globe, FolderOpen, ArrowDownUp, FileText, LogOut } from 'lucide-react';
+import { LayoutDashboard, Globe, FolderOpen, ArrowDownUp, FileText, CalendarClock, LogOut } from 'lucide-react';
 import clsx from 'clsx';
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/projects', label: 'Proyectos', icon: FolderOpen },
   { path: '/transactions', label: 'Transacciones', icon: ArrowDownUp },
   { path: '/invoices', label: 'Facturas', icon: FileText },
+  { path: '/cashflow', label: 'Flujo de Caja', icon: CalendarClock },
 ];
 
 export default function Navbar() {
