@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { logAudit, getClientIp } from '../services/auditLog';
+import { flagDuplicatesForIds } from '../services/duplicateDetection';
 
 /**
  * 📊 ESTRUCTURA DE DATOS QUE LLEGA DESDE N8N
@@ -45,6 +46,7 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
     let created = 0;
     let updated = 0;
     let skipped = 0;
+    const createdIds: number[] = [];
     const errors: string[] = [];
 
     // 🔄 Procesar cada transacción
@@ -71,6 +73,7 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
         // If createdAt equals updatedAt (within 1 second), it was just created
         if (Math.abs(result.createdAt.getTime() - result.updatedAt.getTime()) < 1000) {
           created++;
+          createdIds.push(result.id);
         } else {
           updated++;
         }
@@ -81,7 +84,17 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
       }
     }
 
-    await logAudit({ action: 'SYNC', entityType: 'Transaction', details: { total: transactions.length, created, updated, skipped }, ipAddress: getClientIp(req) });
+    // Detección de duplicados por contenido (fecha+importe+concepto)
+    let flaggedForReview = 0;
+    if (createdIds.length > 0) {
+      try {
+        flaggedForReview = await flagDuplicatesForIds(createdIds);
+      } catch (error) {
+        console.error('Error en detección de duplicados:', error);
+      }
+    }
+
+    await logAudit({ action: 'SYNC', entityType: 'Transaction', details: { total: transactions.length, created, updated, skipped, flaggedForReview }, ipAddress: getClientIp(req) });
 
     // REPORTE FINAL
     res.status(200).json({
@@ -91,6 +104,7 @@ export const syncTransactions = async (req: Request, res: Response): Promise<voi
         created,
         updated,
         skipped,
+        flaggedForReview,
       },
       errors: errors.length > 0 ? errors : undefined,
     });

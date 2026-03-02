@@ -198,6 +198,8 @@ export interface Transaction {
   hasInvoice: boolean;
   isArchived: boolean;
   isFixed: boolean;
+  needsReview: boolean;
+  duplicateGroupId: string | null;
   createdAt: string;
   updatedAt: string;
   project?: {
@@ -217,6 +219,7 @@ export interface TransactionFilters {
   isManual?: boolean;
   isArchived?: string; // 'true' | 'false' | 'all'
   isFixed?: boolean;
+  needsReview?: boolean;
   search?: string;
   amountMin?: number;
   amountMax?: number;
@@ -231,6 +234,7 @@ export interface UpdateTransactionData {
   expenseCategory?: ExpenseCategory | null;
   notes?: string | null;
   isFixed?: boolean;
+  needsReview?: boolean;
   date?: string;
   amount?: number;
   concept?: string;

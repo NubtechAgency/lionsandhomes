@@ -81,6 +81,10 @@ model Transaction {
   // Tipo de gasto: fijo o variable (por defecto variable)
   isFixed          Boolean           @default(false)
 
+  // Detección de duplicados por contenido (fecha+importe+concepto)
+  needsReview      Boolean           @default(false) // TRUE si posible duplicado pendiente de revisión
+  duplicateGroupId String?           // Hash determinista: agrupa transacciones con mismo contenido
+
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -95,6 +99,8 @@ model Transaction {
   @@index([isManual])
   @@index([isArchived])
   @@index([isFixed])
+  @@index([needsReview])
+  @@index([duplicateGroupId])
   @@index([isArchived, date])
   @@index([isArchived, amount])
   @@index([isArchived, expenseCategory, amount])

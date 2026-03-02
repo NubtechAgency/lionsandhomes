@@ -6,7 +6,7 @@ import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp, Plus, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp, Plus, ArrowUp, ArrowDown, AlertTriangle, CheckCircle } from 'lucide-react';
 import clsx from 'clsx';
 import type {
   Transaction,
@@ -47,12 +47,15 @@ export default function Transactions() {
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState({ totalExpenses: 0, withoutInvoice: 0, unassigned: 0 });
+  const [stats, setStats] = useState({ totalExpenses: 0, withoutInvoice: 0, unassigned: 0, pendingReview: 0 });
   const [pageSize, setPageSize] = useState(50);
 
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null);
+
+  // Estado para escaneo de duplicados
+  const [isScanning, setIsScanning] = useState(false);
 
   // Estado para crear transacción manual
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -172,6 +175,34 @@ export default function Transactions() {
       console.error('Error al subir factura:', err);
     } finally {
       setUploadingInvoiceId(null);
+    }
+  };
+
+  const handleScanDuplicates = async () => {
+    try {
+      setIsScanning(true);
+      const result = await transactionAPI.scanDuplicates();
+      await loadTransactions();
+      alert(result.message);
+    } catch (err) {
+      console.error('Error al escanear duplicados:', err);
+      alert('Error al escanear duplicados');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleApproveTransaction = async (transactionId: number) => {
+    const prev = transactions.map(t => ({ ...t }));
+    setTransactions(txs => txs.map(t =>
+      t.id === transactionId ? { ...t, needsReview: false } : t
+    ));
+    try {
+      await transactionAPI.updateTransaction(transactionId, { needsReview: false });
+      await loadTransactions();
+    } catch (err) {
+      setTransactions(prev);
+      console.error('Error al aprobar transacción:', err);
     }
   };
 
@@ -306,7 +337,7 @@ export default function Transactions() {
       : <ArrowDown size={12} className="inline ml-1" />;
   };
 
-  const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'amountType' && k !== 'sortBy' && k !== 'sortOrder' && v !== undefined);
+  const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'amountType' && k !== 'sortBy' && k !== 'sortOrder' && k !== 'needsReview' && v !== undefined);
 
   const { totalExpenses, withoutInvoice, unassigned } = stats;
 
@@ -320,13 +351,24 @@ export default function Transactions() {
             <h1 className="text-2xl font-bold text-gray-900">Transacciones</h1>
             <p className="text-gray-500 text-sm mt-1">Gestiona y asigna las transacciones bancarias</p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors"
-          >
-            <Plus size={18} />
-            Nueva transacción
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleScanDuplicates}
+              disabled={isScanning}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
+              title="Escanear transacciones existentes en busca de duplicados"
+            >
+              {isScanning ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+              {isScanning ? 'Escaneando...' : 'Buscar duplicados'}
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors"
+            >
+              <Plus size={18} />
+              Nueva transacción
+            </button>
+          </div>
         </div>
 
         {/* Tabs: Gastos / Ingresos */}
@@ -386,6 +428,32 @@ export default function Transactions() {
               subtitle="Gastos sin asignar"
               color={unassigned > 0 ? 'amber' : 'green'}
             />
+          </div>
+        )}
+
+        {/* Banner de posibles duplicados */}
+        {stats.pendingReview > 0 && (
+          <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 mb-6">
+            <div className="flex items-center gap-3">
+              <AlertTriangle size={20} className="text-amber-600 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">{stats.pendingReview}</span> transacci{stats.pendingReview === 1 ? 'ón pendiente' : 'ones pendientes'} de revisión — posibles duplicados
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setFilters(prev => ({ ...prev, needsReview: prev.needsReview ? undefined : true }));
+                setCurrentPage(0);
+              }}
+              className={clsx(
+                'text-sm font-medium px-3 py-1.5 rounded-lg transition-colors',
+                filters.needsReview
+                  ? 'bg-amber-600 text-white hover:bg-amber-700'
+                  : 'bg-amber-200 text-amber-800 hover:bg-amber-300'
+              )}
+            >
+              {filters.needsReview ? 'Ver todas' : 'Ver pendientes'}
+            </button>
           </div>
         )}
 
@@ -620,13 +688,32 @@ export default function Transactions() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {transactions.map(t => (
-                    <tr key={t.id} onClick={(e) => handleRowClick(e, t)} className="hover:bg-amber-50/30 transition-colors cursor-pointer">
+                    <tr
+                      key={t.id}
+                      onClick={(e) => handleRowClick(e, t)}
+                      className={clsx(
+                        'transition-colors cursor-pointer',
+                        t.needsReview
+                          ? 'bg-amber-50/50 border-l-4 border-l-amber-400 hover:bg-amber-100/50'
+                          : 'hover:bg-amber-50/30'
+                      )}
+                    >
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                         {formatDate(t.date)}
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-gray-800 truncate max-w-xs">{t.concept}</p>
-                        <p className="text-xs text-gray-400">{t.category}</p>
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate max-w-xs">{t.concept}</p>
+                            <p className="text-xs text-gray-400">{t.category}</p>
+                          </div>
+                          {t.needsReview && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-800 whitespace-nowrap flex-shrink-0">
+                              <AlertTriangle size={10} />
+                              Posible duplicado
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className={`px-4 py-3 text-sm font-semibold text-right whitespace-nowrap ${getDisplayAmount(t) < 0 ? 'text-red-600' : 'text-green-600'}`}>
                         {getDisplayAmount(t) < 0 ? '-' : '+'}€{formatCurrency(Math.abs(getDisplayAmount(t)))}
@@ -714,6 +801,16 @@ export default function Transactions() {
                       )}
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
+                          {t.needsReview && (
+                            <button
+                              onClick={() => handleApproveTransaction(t.id)}
+                              className="text-green-600 hover:text-green-700 text-sm px-2 py-1 rounded hover:bg-green-50 transition-colors flex items-center gap-1"
+                              title="Marcar como no duplicado"
+                            >
+                              <CheckCircle size={14} />
+                              No es duplicado
+                            </button>
+                          )}
                           <button
                             onClick={() => handleEdit(t)}
                             className="text-amber-600 hover:text-amber-700 text-sm px-2 py-1 rounded hover:bg-amber-50 transition-colors"

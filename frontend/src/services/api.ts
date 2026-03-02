@@ -222,6 +222,7 @@ export const transactionAPI = {
       totalExpenses: number;
       withoutInvoice: number;
       unassigned: number;
+      pendingReview: number;
     };
   }> => {
     const params = new URLSearchParams();
@@ -235,6 +236,7 @@ export const transactionAPI = {
     if (filters?.isManual !== undefined) params.append('isManual', filters.isManual.toString());
     if (filters?.isArchived) params.append('isArchived', filters.isArchived);
     if (filters?.isFixed !== undefined) params.append('isFixed', filters.isFixed.toString());
+    if (filters?.needsReview !== undefined) params.append('needsReview', filters.needsReview.toString());
     if (filters?.search) params.append('search', filters.search);
     if (filters?.amountMin) params.append('amountMin', filters.amountMin.toString());
     if (filters?.amountMax) params.append('amountMax', filters.amountMax.toString());
@@ -252,6 +254,7 @@ export const transactionAPI = {
         totalExpenses: number;
         withoutInvoice: number;
         unassigned: number;
+        pendingReview: number;
       };
     }>(`/api/transactions${queryString ? `?${queryString}` : ''}`);
   },
@@ -282,6 +285,12 @@ export const transactionAPI = {
   archiveTransaction: async (id: number): Promise<{ message: string; transaction: Transaction }> => {
     return fetchAPI<{ message: string; transaction: Transaction }>(`/api/transactions/${id}/archive`, {
       method: 'PATCH',
+    });
+  },
+
+  scanDuplicates: async (): Promise<{ message: string; scanned: number; flagged: number; groups: number }> => {
+    return fetchAPI<{ message: string; scanned: number; flagged: number; groups: number }>('/api/transactions/scan-duplicates', {
+      method: 'POST',
     });
   },
 };

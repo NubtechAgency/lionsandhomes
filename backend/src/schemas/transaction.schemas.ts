@@ -26,6 +26,7 @@ export const updateTransactionSchema = z.object({
   expenseCategory: z.enum(EXPENSE_CATEGORIES).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   isFixed: z.boolean().optional(),
+  needsReview: z.boolean().optional(),
 });
 
 export const listTransactionsQuerySchema = z.object({
@@ -37,6 +38,7 @@ export const listTransactionsQuerySchema = z.object({
   isManual: z.enum(['true', 'false']).optional(),
   isArchived: z.string().optional(),
   isFixed: z.enum(['true', 'false']).optional(),
+  needsReview: z.enum(['true', 'false']).optional(),
   search: z.string().max(200).optional(),
   amountMin: z.string().optional(),
   amountMax: z.string().optional(),

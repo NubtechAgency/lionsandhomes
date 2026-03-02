@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { INVOICE_EXEMPT_CATEGORIES } from './projectController';
 import { logAudit, getClientIp } from '../services/auditLog';
+import { flagDuplicatesForIds, scanAllDuplicates } from '../services/duplicateDetection';
 
 /**
  * POST /api/transactions
@@ -111,11 +112,28 @@ export const createTransaction = async (req: Request, res: Response): Promise<vo
       });
     });
 
+    // Detección de duplicados por contenido
+    try {
+      await flagDuplicatesForIds([transaction!.id]);
+    } catch (err) {
+      console.error('Error en detección de duplicados:', err);
+    }
+
+    // Re-fetch para incluir needsReview actualizado
+    const finalTransaction = await prisma.transaction.findUnique({
+      where: { id: transaction!.id },
+      include: {
+        project: { select: { id: true, name: true } },
+        allocations: { include: { project: { select: { id: true, name: true } } } },
+        invoices: true,
+      },
+    });
+
     await logAudit({ action: 'CREATE', entityType: 'Transaction', entityId: transaction!.id, userId: req.userId, details: { amount, concept }, ipAddress: getClientIp(req) });
 
     res.status(201).json({
       message: 'Transacción manual creada exitosamente',
-      transaction,
+      transaction: finalTransaction,
     });
   } catch (error) {
     console.error('Error en createTransaction:', error);
@@ -141,6 +159,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       isManual,
       isArchived,
       isFixed,
+      needsReview,
       search,
       amountMin,
       amountMax,
@@ -183,6 +202,10 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
 
     if (isFixed !== undefined) {
       where.isFixed = isFixed === 'true';
+    }
+
+    if (needsReview !== undefined) {
+      where.needsReview = needsReview === 'true';
     }
 
     // Filtro por tipo de importe: solo gastos o solo ingresos
@@ -248,11 +271,12 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       expensesOnly.amount = { lt: 0 };
     }
 
-    const [total, totalExpensesAgg, withoutInvoiceCount, unassignedCount] = await Promise.all([
+    const [total, totalExpensesAgg, withoutInvoiceCount, unassignedCount, pendingReviewCount] = await Promise.all([
       prisma.transaction.count({ where }),
       prisma.transaction.aggregate({ where: expensesOnly, _sum: { amount: true } }),
       prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false, expenseCategory: { notIn: [...INVOICE_EXEMPT_CATEGORIES] } } }),
       prisma.transaction.count({ where: { ...expensesOnly, allocations: { none: {} } } }),
+      prisma.transaction.count({ where: { isArchived: false, needsReview: true } }),
     ]);
 
     res.json({
@@ -267,6 +291,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
         totalExpenses: Math.abs(totalExpensesAgg._sum.amount || 0),
         withoutInvoice: withoutInvoiceCount,
         unassigned: unassignedCount,
+        pendingReview: pendingReviewCount,
       }
     });
   } catch (error) {
@@ -330,7 +355,7 @@ export const getTransaction = async (req: Request, res: Response): Promise<void>
 export const updateTransaction = async (req: Request, res: Response): Promise<void> => {
   try {
     const transactionId = parseInt(req.params.id as string);
-    const { projectId, allocations: bodyAllocations, expenseCategory, notes, isFixed, date, amount, concept } = req.body;
+    const { projectId, allocations: bodyAllocations, expenseCategory, notes, isFixed, needsReview: needsReviewBody, date, amount, concept } = req.body;
 
     // 🔍 Verificar que la transacción existe
     const existingTransaction = await prisma.transaction.findUnique({
@@ -383,6 +408,11 @@ export const updateTransaction = async (req: Request, res: Response): Promise<vo
     // Actualizar isFixed
     if (isFixed !== undefined) {
       updateData.isFixed = isFixed;
+    }
+
+    // Actualizar needsReview (aprobar/desmarcar posible duplicado)
+    if (needsReviewBody !== undefined) {
+      updateData.needsReview = needsReviewBody;
     }
 
     // Campos editables solo para transacciones manuales
@@ -532,6 +562,28 @@ export const archiveTransaction = async (req: Request, res: Response): Promise<v
       }
     });
 
+    // Auto-clear: si archivamos un duplicado y solo queda 1 en su grupo, limpiar el flag
+    if (updated.isArchived && updated.needsReview && updated.duplicateGroupId) {
+      const remainingInGroup = await prisma.transaction.count({
+        where: {
+          duplicateGroupId: updated.duplicateGroupId,
+          needsReview: true,
+          isArchived: false,
+          id: { not: transactionId },
+        },
+      });
+      if (remainingInGroup === 1) {
+        await prisma.transaction.updateMany({
+          where: {
+            duplicateGroupId: updated.duplicateGroupId,
+            needsReview: true,
+            isArchived: false,
+          },
+          data: { needsReview: false },
+        });
+      }
+    }
+
     await logAudit({ action: updated.isArchived ? 'ARCHIVE' : 'UNARCHIVE', entityType: 'Transaction', entityId: transactionId, userId: req.userId, ipAddress: getClientIp(req) });
 
     res.json({
@@ -633,6 +685,30 @@ export const checkDuplicates = async (_req: Request, res: Response): Promise<voi
     res.status(500).json({
       error: 'Error del servidor',
       message: 'Error al comprobar duplicados',
+    });
+  }
+};
+
+/**
+ * POST /api/transactions/scan-duplicates
+ * Escanea todas las transacciones existentes y marca duplicados por contenido
+ * (fecha ±1 día + importe + concepto). Acción única para datos históricos.
+ */
+export const scanDuplicates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await scanAllDuplicates();
+
+    await logAudit({ action: 'SCAN_DUPLICATES', entityType: 'Transaction', details: result, userId: req.userId, ipAddress: getClientIp(req) });
+
+    res.json({
+      message: `Escaneo completado: ${result.flagged} transacciones marcadas en ${result.groups} grupos`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Error en scanDuplicates:', error);
+    res.status(500).json({
+      error: 'Error del servidor',
+      message: 'Error al escanear duplicados',
     });
   }
 };
