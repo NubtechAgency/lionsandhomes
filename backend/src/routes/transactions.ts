@@ -8,6 +8,7 @@ import {
   archiveTransaction,
   checkDuplicates,
   scanDuplicates,
+  archiveDuplicates,
 } from '../controllers/transactionController';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -46,6 +47,12 @@ router.get('/check-duplicates', checkDuplicates);
  * Escanear todas las transacciones existentes y marcar duplicados por contenido
  */
 router.post('/scan-duplicates', scanDuplicates);
+
+/**
+ * POST /api/transactions/archive-duplicates
+ * Archivar todos los duplicados (conserva uno por grupo)
+ */
+router.post('/archive-duplicates', archiveDuplicates);
 
 /**
  * GET /api/transactions/:id

@@ -53,6 +53,9 @@ task.md
 # Documentacion interna (no publicar)
 ARCHITECTURE.html
 
+# Cookies / tokens
+cookies.txt
+
 # Misc
 *.tgz
 *.lock

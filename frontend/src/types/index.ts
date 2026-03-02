@@ -106,6 +106,8 @@ export interface UpdateProjectData {
 
 export type OcrStatus = 'NONE' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'BUDGET_EXCEEDED';
 
+export type InvoiceSource = 'web' | 'telegram' | 'bulk';
+
 export interface Invoice {
   id: number;
   transactionId: number | null;
@@ -117,6 +119,7 @@ export interface Invoice {
   ocrVendor?: string | null;
   ocrError?: string | null;
   ocrCostCents?: number | null;
+  source?: InvoiceSource;
   createdAt: string;
 }
 
@@ -131,6 +134,7 @@ export interface OrphanInvoice {
   ocrVendor: string | null;
   ocrError: string | null;
   ocrCostCents: number | null;
+  source?: InvoiceSource;
   createdAt: string;
 }
 

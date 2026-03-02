@@ -7,29 +7,7 @@ import { logAudit, getClientIp } from '../services/auditLog';
 import { extractInvoiceData, estimateCostCents } from '../services/ocr';
 import { withOcrMutex, checkBudget, recordUsage, getUsageSummary } from '../services/ocr-budget';
 import { findMatches } from '../services/matching';
-
-/**
- * Valida los magic bytes del archivo para verificar que el contenido real
- * coincide con el MIME type declarado (previene MIME spoofing).
- */
-function validateMagicBytes(buffer: Buffer, mimetype: string): boolean {
-  if (buffer.length < 12) return false;
-  const hex = buffer.subarray(0, 4).toString('hex');
-
-  switch (mimetype) {
-    case 'application/pdf':
-      return hex.startsWith('25504446'); // %PDF
-    case 'image/jpeg':
-      return hex.startsWith('ffd8ff');
-    case 'image/png':
-      return hex === '89504e47'; // ‰PNG
-    case 'image/webp':
-      // RIFF....WEBP
-      return hex === '52494646' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
-    default:
-      return false;
-  }
-}
+import { validateMagicBytes } from '../lib/fileValidation';
 
 /**
  * POST /api/invoices/upload
@@ -101,6 +79,7 @@ export async function uploadInvoice(req: Request, res: Response): Promise<void> 
             transactionId: txId,
             url: key,
             fileName: file.originalname,
+            source: 'web',
           },
         });
 
@@ -326,6 +305,7 @@ export async function bulkUploadInvoices(req: Request, res: Response): Promise<v
             url: key,
             fileName: file.originalname,
             ocrStatus: 'PENDING',
+            source: 'bulk',
           },
         });
       } catch (dbErr) {
@@ -499,6 +479,7 @@ export async function listOrphanInvoices(req: Request, res: Response): Promise<v
         ocrVendor: inv.ocrVendor,
         ocrError: inv.ocrError,
         ocrCostCents: inv.ocrCostCents,
+        source: inv.source,
         createdAt: inv.createdAt,
       }))
     );

@@ -694,6 +694,74 @@ export const checkDuplicates = async (_req: Request, res: Response): Promise<voi
  * Escanea todas las transacciones existentes y marca duplicados por contenido
  * (fecha ±1 día + importe + concepto). Acción única para datos históricos.
  */
+/**
+ * POST /api/transactions/archive-duplicates
+ * Archiva todos los duplicados excepto uno por grupo (conserva el más antiguo).
+ * Auto-limpia needsReview del que queda.
+ */
+export const archiveDuplicates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Obtener todas las transacciones pendientes de revisión, agrupadas por duplicateGroupId
+    const flagged = await prisma.transaction.findMany({
+      where: { needsReview: true, duplicateGroupId: { not: null }, isArchived: false },
+      select: { id: true, duplicateGroupId: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Agrupar por duplicateGroupId
+    const groups = new Map<string, number[]>();
+    for (const t of flagged) {
+      const gid = t.duplicateGroupId!;
+      if (!groups.has(gid)) groups.set(gid, []);
+      groups.get(gid)!.push(t.id);
+    }
+
+    let archived = 0;
+    let cleared = 0;
+
+    for (const [, ids] of groups) {
+      if (ids.length < 2) {
+        // Solo 1 en el grupo — limpiar flag sin archivar
+        await prisma.transaction.updateMany({
+          where: { id: { in: ids } },
+          data: { needsReview: false },
+        });
+        cleared += ids.length;
+        continue;
+      }
+      // Conservar el primero (más antiguo por createdAt), archivar el resto
+      const [keep, ...toArchive] = ids;
+      await prisma.transaction.updateMany({
+        where: { id: { in: toArchive } },
+        data: { isArchived: true, needsReview: false },
+      });
+      // Limpiar flag del que queda
+      await prisma.transaction.update({
+        where: { id: keep },
+        data: { needsReview: false },
+      });
+      archived += toArchive.length;
+      cleared++;
+    }
+
+    await logAudit({
+      action: 'ARCHIVE_DUPLICATES', entityType: 'Transaction',
+      details: { groups: groups.size, archived, cleared },
+      userId: req.userId, ipAddress: getClientIp(req),
+    });
+
+    res.json({
+      message: `${archived} duplicados archivados, ${cleared} transacciones conservadas`,
+      archived,
+      cleared,
+      groups: groups.size,
+    });
+  } catch (error) {
+    console.error('Error en archiveDuplicates:', error);
+    res.status(500).json({ error: 'Error del servidor', message: 'Error al archivar duplicados' });
+  }
+};
+
 export const scanDuplicates = async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await scanAllDuplicates();

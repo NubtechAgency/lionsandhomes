@@ -125,6 +125,13 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.color}`}>
             {badge.label}
           </span>
+          {invoice.source && invoice.source !== 'web' && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              invoice.source === 'telegram' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+            }`}>
+              {invoice.source === 'telegram' ? 'Telegram' : 'Bulk'}
+            </span>
+          )}
           <a
             href={invoice.downloadUrl}
             target="_blank"

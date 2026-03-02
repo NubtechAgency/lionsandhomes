@@ -192,6 +192,21 @@ export default function Transactions() {
     }
   };
 
+  const handleArchiveAllDuplicates = async () => {
+    if (!confirm(`¿Archivar todos los duplicados? Se conservará la transacción más antigua de cada grupo.`)) return;
+    try {
+      setIsScanning(true);
+      const result = await transactionAPI.archiveDuplicates();
+      await loadTransactions();
+      alert(result.message);
+    } catch (err) {
+      console.error('Error al archivar duplicados:', err);
+      alert('Error al archivar duplicados');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const handleApproveTransaction = async (transactionId: number) => {
     const prev = transactions.map(t => ({ ...t }));
     setTransactions(txs => txs.map(t =>
@@ -440,20 +455,30 @@ export default function Transactions() {
                 <span className="font-semibold">{stats.pendingReview}</span> transacci{stats.pendingReview === 1 ? 'ón pendiente' : 'ones pendientes'} de revisión — posibles duplicados
               </p>
             </div>
-            <button
-              onClick={() => {
-                setFilters(prev => ({ ...prev, needsReview: prev.needsReview ? undefined : true }));
-                setCurrentPage(0);
-              }}
-              className={clsx(
-                'text-sm font-medium px-3 py-1.5 rounded-lg transition-colors',
-                filters.needsReview
-                  ? 'bg-amber-600 text-white hover:bg-amber-700'
-                  : 'bg-amber-200 text-amber-800 hover:bg-amber-300'
-              )}
-            >
-              {filters.needsReview ? 'Ver todas' : 'Ver pendientes'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setFilters(prev => ({ ...prev, needsReview: prev.needsReview ? undefined : true }));
+                  setCurrentPage(0);
+                }}
+                className={clsx(
+                  'text-sm font-medium px-3 py-1.5 rounded-lg transition-colors',
+                  filters.needsReview
+                    ? 'bg-amber-600 text-white hover:bg-amber-700'
+                    : 'bg-amber-200 text-amber-800 hover:bg-amber-300'
+                )}
+              >
+                {filters.needsReview ? 'Ver todas' : 'Ver pendientes'}
+              </button>
+              <button
+                onClick={handleArchiveAllDuplicates}
+                disabled={isScanning}
+                className="text-sm font-medium px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                <Archive size={14} />
+                Archivar todos
+              </button>
+            </div>
           </div>
         )}
 

@@ -86,7 +86,7 @@ export async function checkBudget(): Promise<BudgetStatus> {
  */
 export async function recordUsage(params: {
   invoiceId: number;
-  userId: number;
+  userId: number | null;
   tokensInput: number;
   tokensOutput: number;
   costCents: number;

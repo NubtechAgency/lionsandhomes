@@ -20,3 +20,9 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 export const CASH_FLOW_TYPES = ['INCOME', 'EXPENSE'] as const;
 export type CashFlowType = (typeof CASH_FLOW_TYPES)[number];
+
+// Auto-assign: umbral de score para vincular factura a transacción automáticamente
+export const AUTO_ASSIGN_THRESHOLD = parseInt(process.env.AUTO_ASSIGN_THRESHOLD || '95', 10);
+
+export const INVOICE_SOURCES = ['web', 'telegram', 'bulk'] as const;
+export type InvoiceSource = (typeof INVOICE_SOURCES)[number];

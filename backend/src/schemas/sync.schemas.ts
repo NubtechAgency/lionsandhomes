@@ -11,3 +11,8 @@ const incomingTransactionSchema = z.object({
 export const syncTransactionsSchema = z.object({
   transactions: z.array(incomingTransactionSchema).max(5000),
 });
+
+// Telegram invoice upload (campos de texto del form multipart)
+export const telegramInvoiceSchema = z.object({
+  ocrHints: z.string().max(1000).optional(),
+});

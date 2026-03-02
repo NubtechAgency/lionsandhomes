@@ -124,6 +124,9 @@ model Invoice {
   ocrTokensUsed    Int?      // Tokens totales consumidos (input + output)
   ocrCostCents     Int?      // Coste estimado en centavos (entero, sin floats)
 
+  // Origen de la factura
+  source           String    @default("web") // 'web' | 'telegram' | 'bulk'
+
   createdAt        DateTime  @default(now())
 
   transaction      Transaction? @relation(fields: [transactionId], references: [id])
@@ -136,7 +139,7 @@ model Invoice {
 model OcrUsage {
   id           Int      @id @default(autoincrement())
   invoiceId    Int      // Factura que generó esta llamada OCR
-  userId       Int      // Usuario que inició la operación
+  userId       Int?     // Usuario que inició la operación (null para n8n/automatizado)
   tokensInput  Int      // Tokens de entrada consumidos
   tokensOutput Int      // Tokens de salida consumidos
   costCents    Int      // Coste en centavos (entero, Math.ceil)

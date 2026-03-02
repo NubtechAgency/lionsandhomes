@@ -293,6 +293,11 @@ export const transactionAPI = {
       method: 'POST',
     });
   },
+  archiveDuplicates: async (): Promise<{ message: string; archived: number; cleared: number; groups: number }> => {
+    return fetchAPI<{ message: string; archived: number; cleared: number; groups: number }>('/api/transactions/archive-duplicates', {
+      method: 'POST',
+    });
+  },
 };
 
 // ========================================
