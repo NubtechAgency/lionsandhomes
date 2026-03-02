@@ -666,6 +666,7 @@ export default function Transactions() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-amber-50/50 text-left">
+                    <th className="w-8"></th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('date')}>
                       Fecha<SortIcon column="date" />
                     </th>
@@ -698,6 +699,17 @@ export default function Transactions() {
                           : 'hover:bg-amber-50/30'
                       )}
                     >
+                      <td className="pl-2 pr-0 py-3">
+                        {t.needsReview && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleArchive(t); }}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title="Archivar duplicado"
+                          >
+                            <Archive size={15} />
+                          </button>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                         {formatDate(t.date)}
                       </td>
@@ -808,7 +820,7 @@ export default function Transactions() {
                               title="Marcar como no duplicado"
                             >
                               <CheckCircle size={14} />
-                              No es duplicado
+                              No duplicado
                             </button>
                           )}
                           <button
