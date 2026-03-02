@@ -467,7 +467,6 @@ export const cashFlowAPI = {
     const params = new URLSearchParams();
     if (filters?.type) params.append('type', filters.type);
     if (filters?.projectId) params.append('projectId', filters.projectId.toString());
-    if (filters?.category) params.append('category', filters.category);
     if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
     if (filters?.dateTo) params.append('dateTo', filters.dateTo);
     if (filters?.sortBy) params.append('sortBy', filters.sortBy);
@@ -478,11 +477,19 @@ export const cashFlowAPI = {
     return fetchAPI(`/api/cashflow${qs ? `?${qs}` : ''}`);
   },
 
+  createBatch: async (
+    entries: CreateCashFlowData[]
+  ): Promise<{ message: string; entries: CashFlowEntry[]; count: number }> => {
+    return fetchAPI<{ message: string; entries: CashFlowEntry[]; count: number }>(
+      '/api/cashflow/batch',
+      { method: 'POST', body: JSON.stringify({ entries }) }
+    );
+  },
+
   summary: async (filters?: CashFlowFilters): Promise<{ months: CashFlowSummaryMonth[] }> => {
     const params = new URLSearchParams();
     if (filters?.type) params.append('type', filters.type);
     if (filters?.projectId) params.append('projectId', filters.projectId.toString());
-    if (filters?.category) params.append('category', filters.category);
     if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
     if (filters?.dateTo) params.append('dateTo', filters.dateTo);
     const qs = params.toString();

@@ -130,6 +130,14 @@ const syncLimiter = rateLimit({
   message: { error: 'Too Many Requests', message: 'Demasiadas sincronizaciones' },
 });
 
+const cashflowBatchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', message: 'Demasiadas creaciones masivas de flujo de caja' },
+});
+
 // Rate limit para refresh de tokens (previene abuso de rotación)
 const refreshLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -176,6 +184,7 @@ app.use('/api/invoices/upload', invoiceUploadLimiter);
 app.use('/api/invoices/bulk-upload', bulkUploadLimiter);
 app.use('/api/invoices/ocr-budget', ocrBudgetLimiter);
 app.use('/api/sync/transactions', syncLimiter);
+app.use('/api/cashflow/batch', cashflowBatchLimiter);
 
 // Rutas de la API
 app.use('/api/auth', authRoutes);

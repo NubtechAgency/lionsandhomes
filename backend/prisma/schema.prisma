@@ -180,7 +180,6 @@ model CashFlowEntry {
   description String
   amount      Float    // Siempre positivo
   date        DateTime
-  category    String?  // Una de las 8 categorías (nullable para INCOME)
   projectId   Int?
   notes       String?
   createdAt   DateTime @default(now())
@@ -191,7 +190,6 @@ model CashFlowEntry {
   @@index([type])
   @@index([date])
   @@index([projectId])
-  @@index([category])
 }
 
 // Categorias de gasto de Lions

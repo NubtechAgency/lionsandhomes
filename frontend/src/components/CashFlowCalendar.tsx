@@ -87,34 +87,50 @@ export default function CashFlowCalendar({ entries, currentMonth, onMonthChange,
           const isRealized = isBefore(day, today) || isSameDay(day, today);
           const isTodayDate = isToday(day);
 
+          const hasIncome = incomeEntries.length > 0;
+          const hasExpense = expenseEntries.length > 0;
+          const hasBoth = hasIncome && hasExpense;
+
           return (
             <div
               key={dateKey}
               onClick={() => onDateClick(day)}
               className={clsx(
                 'min-h-[70px] p-1.5 rounded-lg border cursor-pointer transition-colors',
-                isTodayDate
-                  ? 'border-amber-300 bg-amber-50/50 ring-2 ring-amber-200'
-                  : 'border-gray-100 hover:bg-gray-50',
+                isTodayDate && 'ring-2 ring-amber-400',
+                // Background color based on entry type
+                hasBoth
+                  ? 'bg-gradient-to-br from-green-100 to-red-100 border-amber-300'
+                  : hasIncome
+                    ? 'bg-green-100 border-green-300'
+                    : hasExpense
+                      ? 'bg-red-100 border-red-300'
+                      : isTodayDate
+                        ? 'border-amber-300 bg-amber-50/50'
+                        : 'border-gray-100 hover:bg-gray-50',
                 isRealized && dayEntries.length > 0 && 'opacity-60'
               )}
             >
               <div className={clsx(
                 'text-xs font-medium mb-1',
-                isTodayDate ? 'text-amber-700' : 'text-gray-700'
+                hasBoth ? 'text-amber-800'
+                  : hasIncome ? 'text-green-800'
+                  : hasExpense ? 'text-red-800'
+                  : isTodayDate ? 'text-amber-700'
+                  : 'text-gray-700'
               )}>
                 {format(day, 'd')}
               </div>
 
               {/* Entry indicators */}
               <div className="space-y-0.5">
-                {incomeEntries.length > 0 && (
+                {hasIncome && (
                   <div
                     onClick={e => { e.stopPropagation(); if (incomeEntries.length === 1) onEntryClick(incomeEntries[0]); }}
                     className="flex items-center gap-1"
                   >
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                    <span className="text-[10px] text-green-700 truncate">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-600 flex-shrink-0" />
+                    <span className="text-[10px] text-green-800 font-medium truncate">
                       {incomeEntries.length === 1
                         ? incomeEntries[0].description.slice(0, 12)
                         : `${incomeEntries.length} cobros`
@@ -122,13 +138,13 @@ export default function CashFlowCalendar({ entries, currentMonth, onMonthChange,
                     </span>
                   </div>
                 )}
-                {expenseEntries.length > 0 && (
+                {hasExpense && (
                   <div
                     onClick={e => { e.stopPropagation(); if (expenseEntries.length === 1) onEntryClick(expenseEntries[0]); }}
                     className="flex items-center gap-1"
                   >
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
-                    <span className="text-[10px] text-red-700 truncate">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-600 flex-shrink-0" />
+                    <span className="text-[10px] text-red-800 font-medium truncate">
                       {expenseEntries.length === 1
                         ? expenseEntries[0].description.slice(0, 12)
                         : `${expenseEntries.length} pagos`

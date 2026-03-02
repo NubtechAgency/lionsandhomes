@@ -265,7 +265,6 @@ export interface CashFlowEntry {
   description: string;
   amount: number;
   date: string;
-  category: ExpenseCategory | null;
   projectId: number | null;
   notes: string | null;
   createdAt: string;
@@ -279,7 +278,6 @@ export interface CashFlowEntry {
 export interface CashFlowFilters {
   type?: CashFlowType;
   projectId?: number;
-  category?: ExpenseCategory;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: 'date' | 'amount' | 'description';
@@ -299,7 +297,6 @@ export interface CreateCashFlowData {
   description: string;
   amount: number;
   date: string;
-  category?: ExpenseCategory | null;
   projectId?: number | null;
   notes?: string | null;
 }
@@ -309,9 +306,19 @@ export interface UpdateCashFlowData {
   description?: string;
   amount?: number;
   date?: string;
-  category?: ExpenseCategory | null;
   projectId?: number | null;
   notes?: string | null;
+}
+
+// Wizard de Plan de Pagos
+export type TrancheFrequency = 'once' | 'weekly' | 'biweekly' | 'monthly';
+
+export interface PlanTranche {
+  id: string;
+  amount: number;
+  startDate: string;
+  frequency: TrancheFrequency;
+  repetitions: number;
 }
 
 // ========================================

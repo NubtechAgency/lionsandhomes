@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import {
   createEntry,
+  batchCreateEntries,
   listEntries,
   getSummary,
   getEntry,
@@ -14,6 +15,7 @@ import {
   createCashFlowEntrySchema,
   updateCashFlowEntrySchema,
   listCashFlowQuerySchema,
+  batchCreateCashFlowSchema,
 } from '../schemas/cashflow.schemas';
 import { idParamSchema } from '../schemas/transaction.schemas';
 
@@ -30,6 +32,9 @@ router.get('/summary', validate(listCashFlowQuerySchema, 'query'), getSummary);
 
 // POST /api/cashflow — crear entrada
 router.post('/', validate(createCashFlowEntrySchema), createEntry);
+
+// POST /api/cashflow/batch — crear múltiples entradas
+router.post('/batch', validate(batchCreateCashFlowSchema), batchCreateEntries);
 
 // GET /api/cashflow/:id — obtener entrada
 router.get('/:id', validate(idParamSchema, 'params'), getEntry);

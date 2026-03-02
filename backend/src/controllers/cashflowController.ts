@@ -9,9 +9,8 @@ import { logAudit, getClientIp } from '../services/auditLog';
  */
 export const createEntry = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { type, description, amount, date, category, projectId, notes } = req.body;
+    const { type, description, amount, date, projectId, notes } = req.body;
 
-    // Verificar que el proyecto existe si se proporciona
     if (projectId) {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) {
@@ -26,7 +25,6 @@ export const createEntry = async (req: Request, res: Response): Promise<void> =>
         description,
         amount,
         date: new Date(date),
-        category: category || null,
         projectId: projectId || null,
         notes: notes || null,
       },
@@ -50,17 +48,89 @@ export const createEntry = async (req: Request, res: Response): Promise<void> =>
 };
 
 /**
+ * POST /api/cashflow/batch
+ * Crear múltiples entradas en una transacción
+ */
+export const batchCreateEntries = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { entries: entryDataList } = req.body;
+
+    // Validar que todos los proyectos referenciados existen
+    const projectIds = [...new Set(
+      entryDataList
+        .map((e: any) => e.projectId)
+        .filter((id: any): id is number => typeof id === 'number')
+    )];
+
+    if (projectIds.length > 0) {
+      const existingProjects = await prisma.project.findMany({
+        where: { id: { in: projectIds as number[] } },
+        select: { id: true },
+      });
+      const existingIds = new Set(existingProjects.map(p => p.id));
+      const missing = (projectIds as number[]).filter(id => !existingIds.has(id));
+      if (missing.length > 0) {
+        res.status(404).json({
+          error: 'Proyecto no encontrado',
+          message: `No existen proyectos con IDs: ${missing.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    // Crear todas las entradas en una transacción DB
+    const created = await prisma.$transaction(
+      entryDataList.map((entry: any) =>
+        prisma.cashFlowEntry.create({
+          data: {
+            type: entry.type,
+            description: entry.description,
+            amount: entry.amount,
+            date: new Date(entry.date),
+            projectId: entry.projectId || null,
+            notes: entry.notes || null,
+          },
+          include: { project: { select: { id: true, name: true } } },
+        })
+      )
+    );
+
+    await logAudit({
+      action: 'CREATE',
+      entityType: 'CashFlowEntry',
+      entityId: created[0]?.id,
+      userId: req.userId,
+      details: {
+        batch: true,
+        count: created.length,
+        description: entryDataList[0]?.description,
+        totalAmount: entryDataList.reduce((sum: number, e: any) => sum + e.amount, 0),
+      },
+      ipAddress: getClientIp(req),
+    });
+
+    res.status(201).json({
+      message: `${created.length} entradas creadas exitosamente`,
+      entries: created,
+      count: created.length,
+    });
+  } catch (error) {
+    console.error('Error en batchCreateEntries (cashflow):', error);
+    res.status(500).json({ error: 'Error del servidor', message: 'Error al crear las entradas' });
+  }
+};
+
+/**
  * GET /api/cashflow
  * Listar entradas con filtros y paginación
  */
 export const listEntries = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { type, projectId, category, dateFrom, dateTo, sortBy, sortOrder, limit, offset } = req.query;
+    const { type, projectId, dateFrom, dateTo, sortBy, sortOrder, limit, offset } = req.query;
 
     const where: any = {};
 
     if (type) where.type = type;
-    if (category) where.category = category;
     if (dateFrom || dateTo) {
       where.date = {};
       if (dateFrom) where.date.gte = new Date(dateFrom as string);
@@ -121,11 +191,10 @@ export const listEntries = async (req: Request, res: Response): Promise<void> =>
  */
 export const getSummary = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { type, projectId, category, dateFrom, dateTo } = req.query;
+    const { type, projectId, dateFrom, dateTo } = req.query;
 
     const where: any = {};
     if (type) where.type = type;
-    if (category) where.category = category;
     if (projectId) {
       if (projectId === 'none') {
         where.projectId = null;
@@ -236,7 +305,7 @@ export const getEntry = async (req: Request, res: Response): Promise<void> => {
 export const updateEntry = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string);
-    const { type, description, amount, date, category, projectId, notes } = req.body;
+    const { type, description, amount, date, projectId, notes } = req.body;
 
     const existing = await prisma.cashFlowEntry.findUnique({ where: { id } });
     if (!existing) {
@@ -244,7 +313,6 @@ export const updateEntry = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Verificar proyecto si se proporciona
     if (projectId) {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) {
@@ -258,7 +326,6 @@ export const updateEntry = async (req: Request, res: Response): Promise<void> =>
     if (description !== undefined) updateData.description = description;
     if (amount !== undefined) updateData.amount = amount;
     if (date !== undefined) updateData.date = new Date(date);
-    if (category !== undefined) updateData.category = category;
     if (projectId !== undefined) updateData.projectId = projectId;
     if (notes !== undefined) updateData.notes = notes;
 

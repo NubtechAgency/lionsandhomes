@@ -1,26 +1,22 @@
 import { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
-import { EXPENSE_CATEGORIES } from '../lib/constants';
-import type { CashFlowEntry, CashFlowType, CreateCashFlowData, UpdateCashFlowData, Project, ExpenseCategory } from '../types';
+import type { CashFlowEntry, CashFlowType, UpdateCashFlowData, Project } from '../types';
 
 interface Props {
   entry?: CashFlowEntry | null;
   projects: Project[];
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: CreateCashFlowData | UpdateCashFlowData) => Promise<void>;
+  onSave: (data: UpdateCashFlowData) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
 }
 
 export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, onSave, onDelete }: Props) {
-  const isEditMode = !!entry;
-
   const [type, setType] = useState<CashFlowType>('EXPENSE');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [category, setCategory] = useState<ExpenseCategory | ''>('');
   const [projectId, setProjectId] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -33,17 +29,8 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
       setDescription(entry.description);
       setAmount(entry.amount.toString());
       setDate(entry.date.split('T')[0]);
-      setCategory(entry.category || '');
       setProjectId(entry.projectId || '');
       setNotes(entry.notes || '');
-    } else {
-      setType('EXPENSE');
-      setDescription('');
-      setAmount('');
-      setDate(new Date().toISOString().split('T')[0]);
-      setCategory('');
-      setProjectId('');
-      setNotes('');
     }
     setError(null);
     setShowDeleteConfirm(false);
@@ -58,20 +45,17 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
     if (!description.trim()) { setError('La descripción es requerida'); return; }
     if (!amount || parseFloat(amount) <= 0) { setError('El importe debe ser positivo'); return; }
     if (!date) { setError('La fecha es requerida'); return; }
-    if (type === 'EXPENSE' && !category) { setError('La categoría es requerida para pagos'); return; }
 
     setIsLoading(true);
     try {
-      const data: any = {
+      await onSave({
         type,
         description: description.trim(),
         amount: parseFloat(amount),
         date,
-        category: category || null,
         projectId: projectId || null,
         notes: notes.trim() || null,
-      };
-      await onSave(data);
+      });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Error al guardar');
@@ -97,11 +81,8 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-amber-600 text-white rounded-t-xl">
-          <h2 className="text-lg font-semibold">
-            {isEditMode ? 'Editar entrada' : 'Nueva entrada'}
-          </h2>
+          <h2 className="text-lg font-semibold">Editar entrada</h2>
           <button onClick={onClose} className="p-1 hover:bg-amber-700 rounded-lg transition-colors">
             <X size={20} />
           </button>
@@ -114,7 +95,7 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
             </div>
           )}
 
-          {/* Tipo: Cobro / Pago */}
+          {/* Tipo */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
             <div className="flex gap-2">
@@ -152,7 +133,6 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
               type="text"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="Ej: Cobro venta apartamento, Pago fontanero..."
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
               required
             />
@@ -170,7 +150,6 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
                   min="0.01"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
-                  placeholder="0.00"
                   className="w-full pl-7 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   required
                 />
@@ -187,24 +166,6 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
               />
             </div>
           </div>
-
-          {/* Categoría (solo para EXPENSE) */}
-          {type === 'EXPENSE' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-              <select
-                value={category}
-                onChange={e => setCategory(e.target.value as ExpenseCategory)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                required
-              >
-                <option value="">Seleccionar categoría</option>
-                {EXPENSE_CATEGORIES.map(cat => (
-                  <option key={cat.key} value={cat.key}>{cat.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
 
           {/* Proyecto */}
           <div>
@@ -228,7 +189,6 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={2}
-              placeholder="Notas adicionales..."
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none"
             />
           </div>
@@ -236,52 +196,35 @@ export default function CashFlowEntryModal({ entry, projects, isOpen, onClose, o
           {/* Botones */}
           <div className="flex items-center justify-between pt-2">
             <div>
-              {isEditMode && onDelete && (
+              {onDelete && entry && (
                 showDeleteConfirm ? (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-red-600">Eliminar?</span>
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      disabled={isLoading}
-                      className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                    >
+                    <button type="button" onClick={handleDelete} disabled={isLoading}
+                      className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
                       Sí
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
-                    >
+                    <button type="button" onClick={() => setShowDeleteConfirm(false)}
+                      className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">
                       No
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 size={14} />
-                    Eliminar
+                  <button type="button" onClick={() => setShowDeleteConfirm(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                    <Trash2 size={14} /> Eliminar
                   </button>
                 )
               )}
             </div>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
+              <button type="button" onClick={onClose}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                 Cancelar
               </button>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-              >
-                {isLoading ? 'Guardando...' : isEditMode ? 'Guardar' : 'Crear'}
+              <button type="submit" disabled={isLoading}
+                className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
+                {isLoading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
