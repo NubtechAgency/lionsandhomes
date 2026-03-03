@@ -238,6 +238,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
     }
 
     // 📊 Obtener transacciones con paginación
+    console.log('[listTransactions] where:', JSON.stringify(where));
     const transactions = await prisma.transaction.findMany({
       where,
       include: {
@@ -271,12 +272,13 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       expensesOnly.amount = { lt: 0 };
     }
 
+    console.log('[listTransactions] findMany OK, running stats...');
     const [total, totalExpensesAgg, withoutInvoiceCount, unassignedCount, pendingReviewCount] = await Promise.all([
-      prisma.transaction.count({ where }),
-      prisma.transaction.aggregate({ where: expensesOnly, _sum: { amount: true } }),
-      prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false, expenseCategory: { notIn: [...INVOICE_EXEMPT_CATEGORIES] } } }),
-      prisma.transaction.count({ where: { ...expensesOnly, allocations: { none: {} } } }),
-      prisma.transaction.count({ where: { isArchived: false, needsReview: true } }),
+      prisma.transaction.count({ where }).then(r => { console.log('[listTransactions] count OK:', r); return r; }),
+      prisma.transaction.aggregate({ where: expensesOnly, _sum: { amount: true } }).then(r => { console.log('[listTransactions] aggregate OK'); return r; }),
+      prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false, expenseCategory: { notIn: [...INVOICE_EXEMPT_CATEGORIES] } } }).then(r => { console.log('[listTransactions] withoutInvoice OK:', r); return r; }),
+      prisma.transaction.count({ where: { ...expensesOnly, allocations: { none: {} } } }).then(r => { console.log('[listTransactions] unassigned OK:', r); return r; }),
+      prisma.transaction.count({ where: { isArchived: false, needsReview: true } }).then(r => { console.log('[listTransactions] pendingReview OK:', r); return r; }),
     ]);
 
     res.json({
