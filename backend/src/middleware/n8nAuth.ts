@@ -1,60 +1,77 @@
-// 🔐 Middleware de autenticación para n8n
+// Middleware de autenticacion para n8n (timing-safe token comparison)
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 
 /**
- * Middleware para verificar que las peticiones vienen desde n8n
- *
- * n8n debe enviar un header:
- * X-N8N-Token: valor_del_token_secreto
- *
- * Este token se configura en el .env como N8N_SYNC_TOKEN
+ * Compara un token entrante con el esperado de forma timing-safe.
+ * Retorna true si coinciden.
+ */
+function verifyToken(expected: string, incoming: string): boolean {
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const incomingBuf = Buffer.from(incoming, 'utf8');
+  return expectedBuf.length === incomingBuf.length && crypto.timingSafeEqual(expectedBuf, incomingBuf);
+}
+
+/**
+ * Middleware para sync de transacciones (POST /api/sync/transactions, GET /api/sync/status)
+ * Header: X-N8N-Token — variable de entorno: N8N_SYNC_TOKEN
  */
 export const n8nAuthMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    // 🔑 Obtener el token secreto configurado en el .env
     const expectedToken = process.env.N8N_SYNC_TOKEN;
 
-    // ⚠️ Verificar que el token está configurado
     if (!expectedToken) {
-      console.error('N8N_SYNC_TOKEN no está configurado en el archivo .env');
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Error de configuración del servidor',
-      });
+      console.error('N8N_SYNC_TOKEN no configurado');
+      res.status(500).json({ error: 'Internal Server Error', message: 'Error de configuracion del servidor' });
       return;
     }
 
-    // 📨 Obtener el token que n8n envía en el header
     const incomingToken = req.headers['x-n8n-token'] as string;
-
-    // ❌ Si no viene el token en el header
     if (!incomingToken) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Falta el token de autenticación. Incluye el header X-N8N-Token',
-      });
+      res.status(401).json({ error: 'Unauthorized', message: 'Falta el header X-N8N-Token' });
       return;
     }
 
-    // 🔍 Verificar que el token coincide (timing-safe para prevenir timing attacks)
-    const expected = Buffer.from(expectedToken, 'utf8');
-    const incoming = Buffer.from(incomingToken, 'utf8');
-    if (expected.length !== incoming.length || !crypto.timingSafeEqual(expected, incoming)) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Token de autenticación inválido',
-      });
+    if (!verifyToken(expectedToken, incomingToken)) {
+      res.status(403).json({ error: 'Forbidden', message: 'Token invalido' });
       return;
     }
 
-    // ✅ Token válido - continuar con el siguiente middleware o controlador
     next();
   } catch (error) {
-    console.error('Error en middleware n8nAuth:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Error al verificar autenticación',
-    });
+    console.error('Error en n8nAuthMiddleware:', error);
+    res.status(500).json({ error: 'Internal Server Error', message: 'Error al verificar autenticacion' });
+  }
+};
+
+/**
+ * Middleware para subida de facturas desde Telegram (POST /api/sync/invoice)
+ * Header: X-Invoice-Token — variable de entorno: N8N_INVOICE_TOKEN
+ */
+export const invoiceAuthMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+  try {
+    const expectedToken = process.env.N8N_INVOICE_TOKEN;
+
+    if (!expectedToken) {
+      console.error('N8N_INVOICE_TOKEN no configurado');
+      res.status(500).json({ error: 'Internal Server Error', message: 'Error de configuracion del servidor' });
+      return;
+    }
+
+    const incomingToken = req.headers['x-invoice-token'] as string;
+    if (!incomingToken) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Falta el header X-Invoice-Token' });
+      return;
+    }
+
+    if (!verifyToken(expectedToken, incomingToken)) {
+      res.status(403).json({ error: 'Forbidden', message: 'Token invalido' });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    console.error('Error en invoiceAuthMiddleware:', error);
+    res.status(500).json({ error: 'Internal Server Error', message: 'Error al verificar autenticacion' });
   }
 };

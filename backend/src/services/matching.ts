@@ -44,6 +44,7 @@ export async function findMatches(
   const where: any = {
     amount: { lt: 0 },         // Solo gastos
     isArchived: false,
+    hasInvoice: false,         // Excluir transacciones que ya tienen factura
   };
 
   // Filtro de fecha: ±30 dias del ocrDate
@@ -171,8 +172,9 @@ function scoreDate(ocrDate: Date | null, txDate: Date): number {
 
 /**
  * Score de concepto/vendor (0-30 puntos).
- * Substring match = 30, overlap de palabras proporcional.
- * Comparacion case-insensitive en JS (compatible con SQLite dev).
+ * Las referencias bancarias son abreviadas ("LEROY MERLIN ES-RONCHIN"),
+ * el vendor OCR es el nombre comercial ("Leroy Merlin").
+ * Estrategia: substring → palabras exactas → prefijo de palabra.
  */
 function scoreConcept(ocrVendor: string | null, txConcept: string): number {
   if (!ocrVendor || ocrVendor.length === 0) return 0;
@@ -182,26 +184,48 @@ function scoreConcept(ocrVendor: string | null, txConcept: string): number {
 
   if (vendor.length === 0 || concept.length === 0) return 0;
 
-  // Substring match directo (alta confianza)
+  // 1. Substring match directo (máxima confianza)
   if (concept.includes(vendor) || vendor.includes(concept)) return 30;
 
-  // Overlap de palabras (Jaccard similarity)
-  const vendorWords = new Set(vendor.split(/\s+/).filter(w => w.length > 2));
-  const conceptWords = new Set(concept.split(/\s+/).filter(w => w.length > 2));
+  const vendorWords = vendor.split(/\s+/).filter(w => w.length > 2);
+  const conceptWords = concept.split(/\s+/).filter(w => w.length > 2);
 
-  if (vendorWords.size === 0 || conceptWords.size === 0) return 0;
+  if (vendorWords.length === 0 || conceptWords.length === 0) return 0;
 
-  let intersection = 0;
-  for (const word of vendorWords) {
-    if (conceptWords.has(word)) intersection++;
+  // 2. Palabras exactas en común (Jaccard)
+  const vendorSet = new Set(vendorWords);
+  const conceptSet = new Set(conceptWords);
+  let exactMatches = 0;
+  for (const word of vendorSet) {
+    if (conceptSet.has(word)) exactMatches++;
   }
 
-  if (intersection === 0) return 0;
+  if (exactMatches > 0) {
+    const union = new Set([...vendorSet, ...conceptSet]).size;
+    const jaccard = exactMatches / union;
+    // Si todas las palabras del vendor aparecen en el concepto → alta confianza
+    if (exactMatches === vendorSet.size) return Math.max(25, Math.round(jaccard * 30));
+    return Math.round(jaccard * 30);
+  }
 
-  const union = new Set([...vendorWords, ...conceptWords]).size;
-  const jaccard = intersection / union;
+  // 3. Partial match: palabra del vendor es prefijo de una palabra del concepto
+  // Útil para "LEROY" matchando "LEROYMERLIN" en referencias compactadas
+  let prefixMatches = 0;
+  for (const vWord of vendorWords) {
+    if (vWord.length < 4) continue; // Evitar falsos positivos con palabras cortas
+    for (const cWord of conceptWords) {
+      if (cWord.startsWith(vWord) || vWord.startsWith(cWord)) {
+        prefixMatches++;
+        break;
+      }
+    }
+  }
 
-  return Math.round(jaccard * 30);
+  if (prefixMatches > 0) {
+    return Math.round((prefixMatches / vendorWords.length) * 15); // Max 15 para partial
+  }
+
+  return 0;
 }
 
 /**

@@ -30,19 +30,31 @@ function getModel(): string {
 }
 
 // Prompt fijo server-side (no manipulable por usuario)
-const OCR_PROMPT = `Analiza esta factura y extrae los siguientes datos. Responde UNICAMENTE con JSON valido, sin texto adicional:
+const OCR_PROMPT = `Eres un extractor de datos de facturas y tickets para una empresa de reformas en España. Responde ÚNICAMENTE con JSON válido, sin texto ni explicaciones adicionales.
 
 {
-  "amount": <importe TOTAL de la factura CON IVA incluido. Usar punto como separador decimal. null si no se puede determinar>,
-  "date": "<fecha de la compra o del servicio en formato YYYY-MM-DD. Si no hay fecha de compra, usar la fecha de emision. null si no se puede determinar>",
-  "vendor": "<nombre del proveedor/empresa que emite la factura. Maximo 500 caracteres. null si no se puede determinar>"
+  "amount": <número decimal positivo — importe TOTAL FINAL con IVA incluido. Punto decimal. null si no determinable>,
+  "date": "<YYYY-MM-DD — fecha del pago o compra. Si no consta, usar fecha de emisión. null si no determinable>",
+  "vendor": "<nombre comercial corto del proveedor, máx 100 chars. null si no determinable>"
 }
 
-Reglas:
-- Si un campo no se puede determinar con certeza, usa null
-- El importe debe ser el TOTAL CON IVA, siempre un numero positivo (sin signo negativo)
-- La fecha debe estar en formato ISO YYYY-MM-DD
-- No incluyas explicaciones, solo el JSON`;
+Reglas para el importe:
+- Busca "Total", "Total a pagar", "Importe total", "Total factura" — es la cifra final que incluye todo
+- NUNCA uses subtotales, base imponible, cuota IVA ni importes parciales por separado
+- En tickets de caja: la última cifra grande abajo es el total
+- Siempre positivo, sin símbolo €, punto decimal (ej: 1234.56)
+
+Reglas para la fecha:
+- Prioriza "Fecha pago", "Fecha operación", "Fecha compra", "Fecha emisión"
+- Si hay varias fechas, usa la del momento del pago/compra
+- Formato estrictamente YYYY-MM-DD
+
+Reglas para el vendor:
+- Usa el nombre comercial corto, no la razón social ni el NIF/CIF
+- Correcto: "Leroy Merlin", "IKEA", "Ferretería García"
+- Incorrecto: "LEROY MERLIN ESPAÑA S.A.U.", "B12345678"
+
+Responde solo con el JSON, sin texto antes ni después.`;
 
 /**
  * Extrae datos de una factura usando Claude Vision API.

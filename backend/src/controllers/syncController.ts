@@ -8,6 +8,8 @@ import { generateOrphanInvoiceKey, uploadFileToR2, deleteFile } from '../service
 import { findMatches } from '../services/matching';
 import { validateMagicBytes } from '../lib/fileValidation';
 import { AUTO_ASSIGN_THRESHOLD } from '../lib/constants';
+import { extractInvoiceData, estimateCostCents } from '../services/ocr';
+import { withOcrMutex, checkBudget, recordUsage } from '../services/ocr-budget';
 
 /**
  * 📊 ESTRUCTURA DE DATOS QUE LLEGA DESDE N8N
@@ -167,128 +169,173 @@ export const getSyncStatus = async (_req: Request, res: Response): Promise<void>
 
 /**
  * POST /api/sync/invoice
- * Recibe una factura desde n8n (Telegram bot).
- * n8n ya ejecuta OCR con Claude Sonnet y envía los datos extraídos (amount, date, vendor, invoiceNumber)
- * junto con el archivo binario via multipart/form-data.
- * Flujo: validar → R2 → guardar datos OCR de n8n → matching → auto-assign si score >= 95 o dejar huérfana.
+ * Recibe una factura desde n8n (Telegram bot) via multipart/form-data.
+ * El backend ejecuta OCR con Claude Vision, hace matching y auto-asigna si score >= 95.
+ * Flujo: validar → R2 → OCR (con budget check) → matching → auto-assign o huérfana.
  */
 export const telegramUploadInvoice = async (req: Request, res: Response): Promise<void> => {
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: 'Sin archivo', message: 'Se requiere un archivo (campo: file)' });
+    return;
+  }
+
+  // Validar magic bytes
+  if (!validateMagicBytes(file.buffer, file.mimetype)) {
+    res.status(400).json({
+      error: 'Archivo inválido',
+      message: 'El contenido del archivo no coincide con el tipo declarado',
+    });
+    return;
+  }
+
+  // 1. Subir a R2 como huérfana
+  const key = generateOrphanInvoiceKey(file.originalname);
   try {
-    const file = req.file;
-    if (!file) {
-      res.status(400).json({ error: 'Sin archivo', message: 'Se requiere un archivo' });
-      return;
-    }
-
-    // Validar magic bytes
-    if (!validateMagicBytes(file.buffer, file.mimetype)) {
-      res.status(400).json({
-        error: 'Archivo inválido',
-        message: 'El contenido del archivo no coincide con el tipo declarado',
-      });
-      return;
-    }
-
-    // Parsear datos OCR enviados por n8n (multipart → todo es string)
-    const amount = req.body.amount ? parseFloat(req.body.amount) : null;
-    const date = req.body.date || null;
-    const vendor = req.body.vendor || null;
-
-    // 1. Subir a R2 como huérfana
-    const key = generateOrphanInvoiceKey(file.originalname);
     await uploadFileToR2(key, file.buffer, file.mimetype);
+  } catch (uploadErr) {
+    console.error('Error subiendo a R2:', uploadErr);
+    res.status(500).json({ error: 'Error del servidor', message: 'No se pudo subir el archivo' });
+    return;
+  }
 
-    // 2. Crear Invoice con datos OCR de n8n (source=telegram, ocrStatus=COMPLETED)
-    let invoice: Invoice;
+  // 2. Crear Invoice en BD con status PENDING (para tener ID antes del OCR)
+  let invoice: Invoice;
+  try {
+    invoice = await prisma.invoice.create({
+      data: {
+        transactionId: null,
+        url: key,
+        fileName: file.originalname,
+        ocrStatus: 'PENDING',
+        source: 'telegram',
+      },
+    });
+  } catch (dbErr) {
+    try { await deleteFile(key); } catch { /* best-effort cleanup */ }
+    console.error('Error creando Invoice en BD:', dbErr);
+    res.status(500).json({ error: 'Error del servidor', message: 'Error al registrar la factura' });
+    return;
+  }
+
+  // 3. OCR bajo mutex (serializa llamadas, previene race conditions en budget)
+  let ocrAmount: number | null = null;
+  let ocrDate: Date | null = null;
+  let ocrVendor: string | null = null;
+
+  await withOcrMutex(async () => {
+    const budget = await checkBudget();
+
+    if (!budget.allowed) {
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { ocrStatus: 'BUDGET_EXCEEDED' },
+      });
+      return; // Sale del mutex, invoice queda como huérfana sin OCR
+    }
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { ocrStatus: 'PROCESSING' },
+    });
+
     try {
-      invoice = await prisma.invoice.create({
+      const ocr = await extractInvoiceData(file.buffer, file.mimetype, file.originalname);
+      const costCents = estimateCostCents(ocr.tokensInput, ocr.tokensOutput);
+
+      await prisma.invoice.update({
+        where: { id: invoice.id },
         data: {
-          transactionId: null,
-          url: key,
-          fileName: file.originalname,
           ocrStatus: 'COMPLETED',
-          source: 'telegram',
-          ocrAmount: amount,
-          ocrDate: date ? new Date(date) : null,
-          ocrVendor: vendor,
+          ocrAmount: ocr.amount,
+          ocrDate: ocr.date ? new Date(ocr.date) : null,
+          ocrVendor: ocr.vendor,
+          ocrRawResponse: ocr.rawResponse,
+          ocrTokensUsed: ocr.tokensInput + ocr.tokensOutput,
+          ocrCostCents: costCents,
         },
       });
-    } catch (dbErr) {
-      try { await deleteFile(key); } catch { /* best-effort cleanup */ }
-      throw dbErr;
+
+      await recordUsage({
+        invoiceId: invoice.id,
+        userId: null, // Origen automático (Telegram/n8n)
+        tokensInput: ocr.tokensInput,
+        tokensOutput: ocr.tokensOutput,
+        costCents,
+        model: process.env.OCR_MODEL || 'claude-sonnet-4-20250514',
+      });
+
+      ocrAmount = ocr.amount;
+      ocrDate = ocr.date ? new Date(ocr.date) : null;
+      ocrVendor = ocr.vendor;
+    } catch (ocrErr) {
+      console.error('Error en OCR:', ocrErr);
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { ocrStatus: 'FAILED', ocrError: 'Error al procesar OCR' },
+      });
     }
+  });
 
-    // 3. Matching + auto-assign
-    let suggestions: Awaited<ReturnType<typeof findMatches>> = [];
-    let autoAssigned = false;
-    let linkedTransactionId: number | null = null;
+  // 4. Matching + auto-assign (solo si OCR extrajo importe)
+  let suggestions: Awaited<ReturnType<typeof findMatches>> = [];
+  let autoAssigned = false;
+  let linkedTransactionId: number | null = null;
 
-    if (amount !== null) {
-      suggestions = await findMatches(
-        amount,
-        date ? new Date(date) : null,
-        vendor
-      );
+  if (ocrAmount !== null) {
+    suggestions = await findMatches(ocrAmount, ocrDate, ocrVendor);
 
-      // Auto-assign si top match >= threshold
-      if (suggestions.length > 0 && suggestions[0].score >= AUTO_ASSIGN_THRESHOLD) {
-        const bestMatch = suggestions[0];
-        try {
-          await prisma.$transaction(async (tx) => {
-            await tx.invoice.update({
-              where: { id: invoice.id },
-              data: { transactionId: bestMatch.transactionId },
-            });
-            await tx.transaction.update({
-              where: { id: bestMatch.transactionId },
-              data: { hasInvoice: true },
-            });
+    if (suggestions.length > 0 && suggestions[0].score >= AUTO_ASSIGN_THRESHOLD) {
+      const bestMatch = suggestions[0];
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.invoice.update({
+            where: { id: invoice.id },
+            data: { transactionId: bestMatch.transactionId },
           });
-
-          autoAssigned = true;
-          linkedTransactionId = bestMatch.transactionId;
-        } catch (linkErr) {
-          console.error('Auto-assign falló, dejando como huérfana:', linkErr);
-        }
+          await tx.transaction.update({
+            where: { id: bestMatch.transactionId },
+            data: { hasInvoice: true },
+          });
+        });
+        autoAssigned = true;
+        linkedTransactionId = bestMatch.transactionId;
+      } catch (linkErr) {
+        console.error('Auto-assign falló, dejando como huérfana:', linkErr);
       }
     }
+  }
 
-    // Re-leer invoice con estado final
-    const finalInvoice = await prisma.invoice.findUnique({ where: { id: invoice.id } });
-    if (!finalInvoice) {
-      res.status(500).json({ error: 'Error del servidor', message: 'No se pudo recuperar la factura creada' });
-      return;
-    }
+  // Re-leer invoice con estado final
+  const finalInvoice = await prisma.invoice.findUnique({ where: { id: invoice.id } });
+  if (!finalInvoice) {
+    res.status(500).json({ error: 'Error del servidor', message: 'No se pudo recuperar la factura' });
+    return;
+  }
 
-    // 4. Audit log
-    await logAudit({
-      action: 'TELEGRAM_UPLOAD',
-      entityType: 'Invoice',
-      entityId: finalInvoice.id,
-      details: {
-        fileName: file.originalname,
-        autoAssigned,
-        linkedTransactionId,
-        matchScore: suggestions[0]?.score ?? null,
-      },
-      ipAddress: getClientIp(req),
-    });
-
-    // 5. Respuesta para n8n
-    res.status(200).json({
-      message: autoAssigned
-        ? 'Factura subida y vinculada automáticamente'
-        : 'Factura subida como huérfana para revisión manual',
-      invoice: finalInvoice,
+  // 5. Audit log
+  await logAudit({
+    action: 'TELEGRAM_UPLOAD',
+    entityType: 'Invoice',
+    entityId: finalInvoice.id,
+    details: {
+      fileName: file.originalname,
+      ocrStatus: finalInvoice.ocrStatus,
       autoAssigned,
       linkedTransactionId,
-      suggestions: suggestions.slice(0, 3),
-    });
-  } catch (error) {
-    console.error('Error en telegram upload:', error);
-    res.status(500).json({
-      error: 'Error del servidor',
-      message: 'Error al procesar la factura de Telegram',
-    });
-  }
+      matchScore: suggestions[0]?.score ?? null,
+    },
+    ipAddress: getClientIp(req),
+  });
+
+  // 6. Respuesta para n8n
+  res.status(200).json({
+    message: autoAssigned
+      ? 'Factura subida y vinculada automáticamente'
+      : 'Factura subida — pendiente de revisión manual',
+    invoice: finalInvoice,
+    autoAssigned,
+    linkedTransactionId,
+    suggestions: suggestions.slice(0, 3),
+  });
 };
