@@ -30,29 +30,45 @@ function getModel(): string {
 }
 
 // Prompt fijo server-side (no manipulable por usuario)
-const OCR_PROMPT = `Eres un extractor de datos de facturas y tickets para una empresa de reformas en España. Responde ÚNICAMENTE con JSON válido, sin texto ni explicaciones adicionales.
+const OCR_PROMPT = `Eres un extractor de datos de facturas para una empresa de reformas en España. Responde ÚNICAMENTE con JSON válido, sin texto ni explicaciones adicionales.
 
 {
   "amount": <número decimal positivo — importe TOTAL FINAL con IVA incluido. Punto decimal. null si no determinable>,
-  "date": "<YYYY-MM-DD — fecha del pago o compra. Si no consta, usar fecha de emisión. null si no determinable>",
+  "date": "<YYYY-MM-DD — fecha de emisión de la factura. null si no determinable>",
   "vendor": "<nombre comercial corto del proveedor, máx 100 chars. null si no determinable>"
 }
 
-Reglas para el importe:
-- Busca "Total", "Total a pagar", "Importe total", "Total factura" — es la cifra final que incluye todo
-- NUNCA uses subtotales, base imponible, cuota IVA ni importes parciales por separado
-- En tickets de caja: la última cifra grande abajo es el total
+REGLAS PARA EL IMPORTE:
+- Busca estas etiquetas (en cualquier capitalización): "TOTAL", "Total:", "Total Factura", "TOTAL FACTURA:", "TOTAL FRA." → es la cifra definitiva con IVA
+- En tablas de IVA al pie de página: la última fila/columna etiquetada "TOTAL" o "TOTAL FRA." es la correcta
+- En facturas de varias páginas (BigMat, etc.): el TOTAL siempre está en la ÚLTIMA página — no uses cifras parciales de páginas anteriores
+- NUNCA uses: "Base Imponible", "Neto", "Importe Bruto", "Importe IVA", "Cuota IVA", "Subtotal", "Importe línea"
+- NUNCA uses "Importe Cobrado" ni "Importe pendiente" (el pendiente puede ser 0 si ya está pagado, no es el total)
+- NUNCA uses el importe del "Vencimiento" (es la fecha/cantidad de pago, no el total de la factura)
 - Siempre positivo, sin símbolo €, punto decimal (ej: 1234.56)
 
-Reglas para la fecha:
-- Prioriza "Fecha pago", "Fecha operación", "Fecha compra", "Fecha emisión"
-- Si hay varias fechas, usa la del momento del pago/compra
-- Formato estrictamente YYYY-MM-DD
+REGLAS PARA LA FECHA:
+- Busca el campo "Fecha", "FECHA" o "Fecha registro" en la cabecera de la factura → es la fecha de emisión
+- Formato DD/MM/YYYY → convertir a YYYY-MM-DD (ej: 30/01/2026 → 2026-01-30)
+- Formato texto → convertir a YYYY-MM-DD (ej: "17 de noviembre de 2025" → 2025-11-17)
+- A veces la fecha aparece en el título de la factura: "FACTURA Nº XX DE 18-11-2025" → usar esa fecha
+- NUNCA uses "Fecha vencimiento" ni "Fecha vto" (es la fecha límite de pago, no de emisión)
+- Formato final estrictamente YYYY-MM-DD
 
-Reglas para el vendor:
-- Usa el nombre comercial corto, no la razón social ni el NIF/CIF
-- Correcto: "Leroy Merlin", "IKEA", "Ferretería García"
-- Incorrecto: "LEROY MERLIN ESPAÑA S.A.U.", "B12345678"
+REGLAS PARA EL VENDOR:
+- Usa el nombre comercial del logo o cabecera, NO la razón social legal ni el NIF/CIF
+- Proveedores habituales de este cliente:
+  "BigMat" (NO "Desarrollos Estratégicos The New Time SL")
+  "Proinco" (NO "Proinco S.A.")
+  "Diperplac" (NO "Diperplac Peninsular de Aislamientos S.L.U.")
+  "Diego Díaz López" (suministros eléctricos)
+  "Ramirez" (NO "Efectos Navales y Droguería Ramirez S.L.")
+  "Ortega Muñoz" (materiales de construcción)
+  "Madegar" (NO "Puertas Madegar S.L.")
+  "Doctor Frío" (NO "Doctor Frio SL")
+  "Saloni" (NO "Ceramica Saloni S.A.U.")
+  "Miguel Gómez Salas" o "Transportes Miguel Gómez Salas"
+  "LKN Mediterranea"
 
 Responde solo con el JSON, sin texto antes ni después.`;
 
