@@ -1,17 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { dashboardAPI, projectAPI, transactionAPI } from '../services/api';
 import type { DashboardStats, Project } from '../types';
 import Navbar from '../components/Navbar';
 import KPICard from '../components/KPICard';
 import ExpenseBarChart from '../components/charts/ExpenseBarChart';
+import DonutChart from '../components/charts/DonutChart';
 import { formatCurrency } from '../lib/formatters';
-import { FolderOpen, FileText, FolderX, Lock, Repeat } from 'lucide-react';
+import { EXPENSE_CATEGORIES } from '../lib/constants';
+import { Lock, Repeat } from 'lucide-react';
 
 export default function Dashboard() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -26,11 +24,16 @@ export default function Dashboard() {
     [projects]
   );
 
+  // Load projects and auto-select first one
   useEffect(() => {
     const loadProjects = async () => {
       try {
         const response = await projectAPI.listProjects('ACTIVE');
         setProjects(response.projects);
+        const active = response.projects.filter((p: Project) => p.name !== 'General');
+        if (active.length > 0 && !selectedProjectId) {
+          setSelectedProjectId(active[0].id);
+        }
       } catch (err) {
         console.error('Error al cargar proyectos:', err);
       }
@@ -70,21 +73,18 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Hola, {user?.name}
-            </h1>
-            <p className="text-gray-500 text-sm mt-1">
-              {stats?.filteredByProject
-                ? `Proyecto: ${stats.filteredByProject}`
-                : 'Vista general de todos los proyectos'}
-            </p>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+            {stats?.filteredByProject && (
+              <p className="text-gray-500 text-sm mt-1">
+                Proyecto: {stats.filteredByProject}
+              </p>
+            )}
           </div>
           <select
             value={selectedProjectId || ''}
             onChange={e => setSelectedProjectId(e.target.value ? parseInt(e.target.value) : undefined)}
             className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
-            <option value="">Todos los proyectos</option>
             {displayProjects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -101,37 +101,6 @@ export default function Dashboard() {
           </div>
         ) : stats && (
           <>
-            {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <KPICard
-                title="Proyectos Activos"
-                value={displayProjects.length}
-                subtitle="En progreso"
-                icon={FolderOpen}
-                color="amber"
-                tooltip="Proyectos con estado 'Activo'. Haz click para verlos."
-                onClick={() => navigate('/projects')}
-              />
-              <KPICard
-                title="Sin Factura"
-                value={stats.kpis.totalWithoutInvoice}
-                subtitle="Transacciones pendientes"
-                icon={FileText}
-                color={stats.kpis.totalWithoutInvoice > 0 ? 'red' : 'green'}
-                tooltip="Gastos que aún no tienen factura adjunta. Haz click para verlos."
-                onClick={() => navigate('/transactions?hasInvoice=false')}
-              />
-              <KPICard
-                title="Sin Proyecto"
-                value={stats.kpis.totalWithoutProject}
-                subtitle="Transacciones sin asignar"
-                icon={FolderX}
-                color={stats.kpis.totalWithoutProject > 0 ? 'red' : 'green'}
-                tooltip="Gastos que no están asignados a ningún proyecto. Haz click para verlos."
-                onClick={() => navigate('/transactions?projectId=none')}
-              />
-            </div>
-
             {/* Charts row + Gastos Fijos/Variables KPIs */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
               <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5">
@@ -158,62 +127,31 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Proyectos activos */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-                <h3 className="text-sm font-semibold text-gray-700">Proyectos Activos</h3>
-                <button
-                  onClick={() => navigate('/projects')}
-                  className="text-xs text-amber-600 hover:text-amber-700 font-medium"
-                >
-                  Ver todos
-                </button>
+            {/* Presupuesto por categoría */}
+            {stats.categoryStats.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-100 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Presupuesto por Categoría</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {stats.categoryStats
+                    .filter(cs => cs.budget > 0 || cs.spent > 0)
+                    .map(cs => {
+                      const catLabel = EXPENSE_CATEGORIES.find(c => c.key === cs.category)?.label || cs.category;
+                      const fixedAmount = stats.fixedByCategory[cs.category] || 0;
+                      const variableAmount = cs.spent - fixedAmount;
+                      return (
+                        <DonutChart
+                          key={cs.category}
+                          spent={cs.spent}
+                          total={cs.budget}
+                          label={catLabel}
+                          fixed={fixedAmount}
+                          variable={variableAmount > 0 ? variableAmount : 0}
+                        />
+                      );
+                    })}
+                </div>
               </div>
-
-              {displayProjects.length === 0 ? (
-                <div className="p-8 text-center text-gray-400">
-                  No hay proyectos activos
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {displayProjects.map(p => {
-                    const spent = p.totalSpent || 0;
-                    const remaining = p.totalBudget - spent;
-                    const pct = p.totalBudget > 0 ? (spent / p.totalBudget) * 100 : 0;
-                    return (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between px-5 py-4 hover:bg-amber-50/30 cursor-pointer transition-colors"
-                        onClick={() => navigate(`/projects/${p.id}`)}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {p._count?.transactions || 0} transacciones
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-4 shrink-0">
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-gray-800">
-                              €{formatCurrency(spent)} / €{formatCurrency(p.totalBudget)}
-                            </p>
-                            <p className={`text-xs ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {remaining < 0 ? 'Excedido' : `€${formatCurrency(remaining)} disponible`}
-                            </p>
-                          </div>
-                          <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${pct > 100 ? 'bg-red-500' : pct > 80 ? 'bg-amber-500' : 'bg-green-500'}`}
-                              style={{ width: `${Math.min(pct, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            )}
           </>
         )}
       </div>

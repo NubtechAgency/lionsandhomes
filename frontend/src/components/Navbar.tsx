@@ -32,7 +32,7 @@ export default function Navbar() {
               className="flex items-center gap-2 cursor-pointer"
               onClick={() => navigate('/')}
             >
-              <span className="text-xl font-bold text-amber-700">Lions</span>
+              <span className="text-xl font-bold tracking-tight text-amber-700">LIONS<span className="text-gray-400">&</span>HOMES</span>
             </div>
 
             <div className="flex gap-1">
