@@ -12,6 +12,53 @@ interface OrphanInvoiceCardProps {
   onDeleted: () => void;
 }
 
+// --- Score ring SVG (32x32) ---
+function ScoreRing({ score }: { score: number }) {
+  const r = 13;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  const color = score >= 80 ? '#16a34a' : score >= 50 ? '#d97706' : '#dc2626';
+  return (
+    <svg width={32} height={32} className="flex-shrink-0">
+      <circle cx={16} cy={16} r={r} fill="none" stroke="#e5e7eb" strokeWidth={3} />
+      <circle
+        cx={16} cy={16} r={r} fill="none" stroke={color} strokeWidth={3}
+        strokeDasharray={circ} strokeDashoffset={offset}
+        strokeLinecap="round" transform="rotate(-90 16 16)"
+      />
+      <text x={16} y={16} textAnchor="middle" dominantBaseline="central"
+        className="text-[10px] font-bold" fill={color}>{score}</text>
+    </svg>
+  );
+}
+
+// --- Match indicators (compare OCR vs transaction) ---
+type MatchIndicator = { icon: 'check' | 'tilde' | 'x'; color: string };
+
+function getAmountIndicator(ocrAmount: number | null, txAmount: number): MatchIndicator | null {
+  if (ocrAmount == null) return null;
+  const diff = Math.abs(ocrAmount - Math.abs(txAmount));
+  const pct = ocrAmount > 0 ? (diff / ocrAmount) * 100 : 100;
+  if (pct < 1) return { icon: 'check', color: 'text-green-500' };
+  if (pct < 10) return { icon: 'tilde', color: 'text-amber-500' };
+  return { icon: 'x', color: 'text-red-400' };
+}
+
+function getDateIndicator(ocrDate: string | null, txDate: string): MatchIndicator | null {
+  if (!ocrDate) return null;
+  const diff = Math.abs(new Date(ocrDate).getTime() - new Date(txDate).getTime());
+  const days = diff / (1000 * 60 * 60 * 24);
+  if (days <= 0.5) return { icon: 'check', color: 'text-green-500' };
+  if (days <= 3) return { icon: 'tilde', color: 'text-amber-500' };
+  return { icon: 'x', color: 'text-red-400' };
+}
+
+function IndicatorIcon({ ind }: { ind: MatchIndicator }) {
+  if (ind.icon === 'check') return <Check size={12} className={ind.color} />;
+  if (ind.icon === 'tilde') return <span className={`text-xs font-bold ${ind.color}`}>~</span>;
+  return <X size={12} className={ind.color} />;
+}
+
 const OCR_STATUS_BADGE: Record<OcrStatus, { label: string; color: string }> = {
   NONE: { label: 'Sin OCR', color: 'bg-gray-100 text-gray-600' },
   PENDING: { label: 'Pendiente', color: 'bg-blue-100 text-blue-700' },
@@ -104,11 +151,6 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
 
   const badge = OCR_STATUS_BADGE[invoice.ocrStatus] || OCR_STATUS_BADGE.NONE;
 
-  const scoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600 bg-green-50';
-    if (score >= 50) return 'text-amber-600 bg-amber-50';
-    return 'text-red-600 bg-red-50';
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
@@ -146,7 +188,7 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
 
       {/* OCR Data (view/edit) */}
       {invoice.ocrStatus === 'COMPLETED' && (
-        <div className="border border-gray-100 rounded-lg p-3 space-y-2">
+        <div className="border border-gray-100 border-l-2 border-l-amber-400 rounded-lg p-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase">Datos OCR</span>
             {!isEditing ? (
@@ -254,27 +296,19 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
             suggestions.map(s => {
               const tx = s.transaction;
               const isExpanded = expandedSuggestion === s.transactionId;
+              const amtInd = getAmountIndicator(invoice.ocrAmount, tx.amount);
+              const dateInd = getDateIndicator(invoice.ocrDate, tx.date);
               return (
                 <div key={s.transactionId} className="bg-gray-50 rounded-lg overflow-hidden">
-                  {/* Summary row (clickable) */}
+                  {/* Header: score + concept + actions */}
                   <div
-                    className="flex items-center justify-between gap-2 p-2 cursor-pointer hover:bg-gray-100 transition-colors"
+                    className="flex items-start gap-2 p-3 pb-0 cursor-pointer"
                     onClick={() => setExpandedSuggestion(isExpanded ? null : s.transactionId)}
                   >
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      {isExpanded ? <ChevronUp size={14} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />}
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-800 truncate">{tx.concept}</p>
-                        <p className="text-xs text-gray-400">
-                          {formatCurrency(Math.abs(tx.amount))} · {formatDate(tx.date)}
-                          {tx.project && ` · ${tx.project.name}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${scoreColor(s.score)}`}>
-                        {s.score}
-                      </span>
+                    <ScoreRing score={s.score} />
+                    <p className="text-sm font-medium text-gray-800 line-clamp-2 flex-1 pt-1">{tx.concept}</p>
+                    <div className="flex items-center gap-1 flex-shrink-0 pt-1">
+                      {isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleLink(s.transactionId); }}
                         disabled={linking !== null}
@@ -290,49 +324,73 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
                     </div>
                   </div>
 
-                  {/* Expanded details */}
+                  {/* Comparison grid: OCR vs Transaction */}
+                  <div className="grid grid-cols-2 gap-x-3 px-3 pb-3 pt-2">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-0.5">Factura (OCR)</p>
+                      <p className="text-sm font-medium text-gray-700">
+                        {invoice.ocrAmount != null ? `${formatCurrency(invoice.ocrAmount)} €` : '—'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {invoice.ocrDate ? formatDate(invoice.ocrDate) : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-0.5">Transaccion</p>
+                      <p className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                        {formatCurrency(Math.abs(tx.amount))} €
+                        {amtInd && <IndicatorIcon ind={amtInd} />}
+                      </p>
+                      <p className="text-xs text-gray-500 flex items-center gap-1">
+                        {formatDate(tx.date)}
+                        {dateInd && <IndicatorIcon ind={dateInd} />}
+                      </p>
+                      {tx.project && (
+                        <span className="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
+                          {tx.project.name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded details (supplementary info only) */}
                   {isExpanded && (
                     <div className="px-3 pb-3 pt-1 border-t border-gray-100 space-y-2">
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                        <div>
-                          <span className="text-gray-400">Concepto:</span>{' '}
-                          <span className="text-gray-700">{tx.concept}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Importe:</span>{' '}
-                          <span className="text-gray-700 font-medium">{formatCurrency(Math.abs(tx.amount))}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Fecha:</span>{' '}
-                          <span className="text-gray-700">{formatDate(tx.date)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Proyecto:</span>{' '}
-                          <span className="text-gray-700">{tx.project?.name || '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Categoria:</span>{' '}
-                          <span className="text-gray-700">{getCategoryLabel(tx.expenseCategory) || '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Factura:</span>{' '}
-                          <span className={tx.hasInvoice ? 'text-green-600' : 'text-amber-600'}>
-                            {tx.hasInvoice ? 'Si' : 'No'}
-                          </span>
-                        </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                        {tx.expenseCategory && (
+                          <div>
+                            <span className="text-gray-400">Categoria:</span>{' '}
+                            <span className="text-gray-700">{getCategoryLabel(tx.expenseCategory)}</span>
+                          </div>
+                        )}
+                        {tx.hasInvoice && (
+                          <span className="text-amber-600 font-medium">Ya tiene factura</span>
+                        )}
                         {tx.notes && (
-                          <div className="col-span-2">
+                          <div className="w-full">
                             <span className="text-gray-400">Notas:</span>{' '}
                             <span className="text-gray-700">{tx.notes}</span>
                           </div>
                         )}
                       </div>
-                      {/* Score breakdown */}
-                      <div className="flex items-center gap-3 text-xs text-gray-400 pt-1 border-t border-gray-100">
-                        <span>Puntuacion:</span>
-                        <span>Importe <b className="text-gray-600">{s.scoreBreakdown.amountScore}</b>/40</span>
-                        <span>Fecha <b className="text-gray-600">{s.scoreBreakdown.dateScore}</b>/30</span>
-                        <span>Concepto <b className="text-gray-600">{s.scoreBreakdown.conceptScore}</b>/30</span>
+                      {/* Score breakdown with mini bars */}
+                      <div className="space-y-1 pt-1 border-t border-gray-100">
+                        {[
+                          { label: 'Importe', val: s.scoreBreakdown.amountScore, max: 40 },
+                          { label: 'Fecha', val: s.scoreBreakdown.dateScore, max: 30 },
+                          { label: 'Concepto', val: s.scoreBreakdown.conceptScore, max: 30 },
+                        ].map(b => (
+                          <div key={b.label} className="flex items-center gap-2 text-[11px]">
+                            <span className="text-gray-400 w-16">{b.label}</span>
+                            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${b.val / b.max >= 0.8 ? 'bg-green-400' : b.val / b.max >= 0.5 ? 'bg-amber-400' : 'bg-red-300'}`}
+                                style={{ width: `${(b.val / b.max) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-gray-500 w-8 text-right">{b.val}/{b.max}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
