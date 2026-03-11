@@ -42,6 +42,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (!selectedProjectId) return;
     const loadData = async () => {
       try {
         setIsLoading(true);
@@ -49,7 +50,7 @@ export default function Dashboard() {
         const [statsData, txData] = await Promise.all([
           dashboardAPI.getStats(selectedProjectId),
           transactionAPI.listTransactions(
-            selectedProjectId ? { projectId: selectedProjectId, amountType: 'expense' } : { amountType: 'expense' },
+            { projectId: selectedProjectId, amountType: 'expense' },
             500,
             0
           ),

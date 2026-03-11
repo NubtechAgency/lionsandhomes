@@ -84,7 +84,7 @@ const loginLimiter = rateLimit({
 // Rate limiting específico para endpoints CPU/IO intensivos
 const dashboardLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too Many Requests', message: 'Demasiadas peticiones al dashboard' },
