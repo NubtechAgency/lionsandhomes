@@ -48,6 +48,7 @@ docker-compose.override.yml
 # Carpetas locales / temporales
 Lions-personal/
 backend/ocr-samples/
+frontend/holded-refs/
 nul
 task.md
 

@@ -17,11 +17,6 @@ export interface AuthResponse {
   user: User;
 }
 
-export interface ApiError {
-  error: string;
-  message: string;
-}
-
 // ========================================
 // TIPOS DE PROYECTOS
 // ========================================

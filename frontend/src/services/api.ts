@@ -220,6 +220,7 @@ export const transactionAPI = {
     pagination: TransactionPagination;
     stats: {
       totalExpenses: number;
+      totalIncome: number;
       withoutInvoice: number;
       unassigned: number;
       pendingReview: number;
@@ -252,6 +253,7 @@ export const transactionAPI = {
       pagination: TransactionPagination;
       stats: {
         totalExpenses: number;
+        totalIncome: number;
         withoutInvoice: number;
         unassigned: number;
         pendingReview: number;

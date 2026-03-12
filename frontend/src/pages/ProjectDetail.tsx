@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { projectAPI, transactionAPI } from '../services/api';
-import Navbar from '../components/Navbar';
-import KPICard from '../components/KPICard';
 import CategoryProgressList from '../components/CategoryProgressList';
 import DonutChart from '../components/charts/DonutChart';
+import ExpenseBarChart from '../components/charts/ExpenseBarChart';
 import { formatCurrency, formatPercentage, formatDate } from '../lib/formatters';
-import { EXPENSE_CATEGORIES } from '../lib/constants';
-import { Wallet, Pencil, Trash2, Construction, AlertTriangle, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
+import { EXPENSE_CATEGORIES, PROJECT_STATUS_CONFIG } from '../lib/constants';
+import { Pencil, Trash2, AlertTriangle, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
 import type { ProjectWithStats, Transaction } from '../types';
 
 export default function ProjectDetail() {
@@ -15,7 +14,8 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const [project, setProject] = useState<ProjectWithStats | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [activeTab, setActiveTab] = useState<'general' | 'transactions' | 'calendar'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'transactions'>('general');
+  const [chartTransactions, setChartTransactions] = useState<{ amount: number; date: string; isFixed: boolean }[]>([]);
   const [txSortBy, setTxSortBy] = useState<'date' | 'amount' | 'concept'>('date');
   const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isLoading, setIsLoading] = useState(true);
@@ -74,6 +74,7 @@ export default function ProjectDetail() {
       ]);
       setProject(projectRes.project);
       setTransactions(txRes.transactions);
+      setChartTransactions(txRes.transactions.filter((t: Transaction) => t.amount < 0).map((t: Transaction) => ({ amount: t.amount, date: t.date, isFixed: t.isFixed })));
     } catch (err: any) {
       setError(err.message || 'Error al cargar el proyecto');
     } finally {
@@ -93,8 +94,8 @@ export default function ProjectDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-amber-50/30">
-        <Navbar />
+      <div className="min-h-screen bg-gray-50">
+  
         <div className="ml-0 p-8 flex items-center justify-center min-h-[80vh]">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600" />
         </div>
@@ -104,8 +105,8 @@ export default function ProjectDetail() {
 
   if (error || !project) {
     return (
-      <div className="min-h-screen bg-amber-50/30">
-        <Navbar />
+      <div className="min-h-screen bg-gray-50">
+  
         <div className="p-8 text-center">
           <p className="text-red-600">{error || 'Proyecto no encontrado'}</p>
           <button onClick={() => navigate('/projects')} className="mt-4 text-amber-600 hover:underline">
@@ -120,17 +121,9 @@ export default function ProjectDetail() {
   const remaining = project.totalBudget - stats.totalSpent;
   const invoiceCount = transactions.filter(t => t.hasInvoice).length;
 
-  const statusBadge = {
-    ACTIVE: 'bg-green-100 text-green-800',
-    COMPLETED: 'bg-blue-100 text-blue-800',
-    ARCHIVED: 'bg-gray-100 text-gray-800',
-  }[project.status] || 'bg-gray-100 text-gray-800';
-
-  const statusLabel = {
-    ACTIVE: 'Activo',
-    COMPLETED: 'Completado',
-    ARCHIVED: 'Archivado',
-  }[project.status] || project.status;
+  const statusCfg = PROJECT_STATUS_CONFIG[project.status] || PROJECT_STATUS_CONFIG.ACTIVE;
+  const statusBadge = statusCfg.bg;
+  const statusLabel = statusCfg.label;
 
   const handleTxSort = (column: 'date' | 'amount' | 'concept') => {
     if (txSortBy === column) {
@@ -151,12 +144,11 @@ export default function ProjectDetail() {
   const tabs = [
     { id: 'general' as const, label: 'Vista general' },
     { id: 'transactions' as const, label: `Transacciones (${transactions.length})` },
-    { id: 'calendar' as const, label: 'Calendario' },
   ];
 
   return (
-    <div className="min-h-screen bg-amber-50/30">
-      <Navbar />
+    <div className="min-h-screen bg-gray-50">
+
       <div className="p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -187,30 +179,25 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <KPICard
-            title="Disponible"
-            value={`€${formatCurrency(remaining)}`}
-            subtitle={`€${formatCurrency(stats.totalSpent)} gastado de €${formatCurrency(project.totalBudget)}`}
-            icon={Wallet}
-            color={remaining < 0 ? 'red' : 'blue'}
-            tooltip="Diferencia entre presupuesto y gasto total del proyecto"
-          />
-          <KPICard
-            title="Consumido"
-            value={formatPercentage(stats.budgetUsedPercentage)}
-            subtitle={`${transactions.length} transacciones`}
-            color={stats.budgetUsedPercentage > 100 ? 'red' : stats.budgetUsedPercentage > 80 ? 'amber' : 'green'}
-            tooltip="Porcentaje del presupuesto total ya gastado en este proyecto"
-          />
-          <KPICard
-            title="Transacciones"
-            value={transactions.length}
-            subtitle="En este proyecto"
-            color="amber"
-            tooltip="Número total de transacciones asignadas a este proyecto"
-          />
+        {/* Summary */}
+        <div className="flex items-center gap-6 text-sm text-gray-500 mb-6">
+          <span>
+            <strong className={remaining < 0 ? 'text-red-600' : 'text-gray-900'}>
+              €{formatCurrency(remaining)}
+            </strong> disponible
+          </span>
+          <span className="text-gray-300">|</span>
+          <span>
+            <strong className={stats.budgetUsedPercentage > 100 ? 'text-red-600' : 'text-gray-900'}>
+              {formatPercentage(stats.budgetUsedPercentage)}
+            </strong> consumido
+          </span>
+          <span className="text-gray-300">|</span>
+          <span><strong className="text-gray-900">{transactions.length}</strong> transacciones</span>
+          <span className="text-gray-300">|</span>
+          <span>
+            €{formatCurrency(stats.totalSpent)} de €{formatCurrency(project.totalBudget)}
+          </span>
         </div>
 
         {/* Alertas de Presupuesto del Proyecto */}
@@ -259,6 +246,14 @@ export default function ProjectDetail() {
             </div>
           );
         })()}
+
+        {/* Expense chart */}
+        {chartTransactions.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Evolución de Gastos</h3>
+            <ExpenseBarChart transactions={chartTransactions as any} />
+          </div>
+        )}
 
         {/* Charts - Donut presupuesto total + por categoría */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -362,8 +357,8 @@ export default function ProjectDetail() {
                   {transactions.filter(t => t.hasInvoice).slice(0, 10).map(t => (
                     <div
                       key={t.id}
-                      onClick={() => navigate(`/transactions?search=${encodeURIComponent(t.concept)}`)}
-                      className="bg-white rounded-lg border border-gray-100 p-3 flex justify-between items-center cursor-pointer hover:border-amber-200 hover:shadow-sm transition-all"
+                      onClick={() => navigate(`/treasury?search=${encodeURIComponent(t.concept)}`)}
+                      className="bg-white rounded-lg border border-gray-100 p-3 flex justify-between items-center cursor-pointer hover:border-gray-300 hover:shadow-sm transition-all"
                     >
                       <div>
                         <p className="text-sm font-medium text-gray-800">{t.invoices?.[0]?.fileName || 'Factura'}</p>
@@ -385,14 +380,14 @@ export default function ProjectDetail() {
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="bg-amber-50/50 text-left">
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleTxSort('date')}>
+                <tr className="bg-gray-50 text-left">
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-gray-900 select-none" onClick={() => handleTxSort('date')}>
                     Fecha<TxSortIcon column="date" />
                   </th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleTxSort('concept')}>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-gray-900 select-none" onClick={() => handleTxSort('concept')}>
                     Concepto<TxSortIcon column="concept" />
                   </th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right cursor-pointer hover:text-amber-700 select-none" onClick={() => handleTxSort('amount')}>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right cursor-pointer hover:text-gray-900 select-none" onClick={() => handleTxSort('amount')}>
                     Importe<TxSortIcon column="amount" />
                   </th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-600">Categoría</th>
@@ -403,8 +398,8 @@ export default function ProjectDetail() {
                 {sortedTransactions.map(t => (
                   <tr
                     key={t.id}
-                    className="hover:bg-amber-50/30 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/transactions?search=${encodeURIComponent(t.concept)}`)}
+                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/treasury?search=${encodeURIComponent(t.concept)}`)}
                   >
                     <td className="px-4 py-3 text-sm text-gray-600">{formatDate(t.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate">{t.concept}</td>
@@ -431,13 +426,6 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {activeTab === 'calendar' && (
-          <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
-            <Construction size={48} className="mx-auto text-amber-400 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-700">Calendario</h3>
-            <p className="text-gray-400 mt-2">Esta funcionalidad estará disponible próximamente</p>
-          </div>
-        )}
       </div>
     </div>
   );

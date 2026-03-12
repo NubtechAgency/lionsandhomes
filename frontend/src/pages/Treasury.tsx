@@ -2,11 +2,9 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { transactionAPI, projectAPI, invoiceAPI } from '../services/api';
 import TransactionEditModal from '../components/TransactionEditModal';
-import Navbar from '../components/Navbar';
-import KPICard from '../components/KPICard';
 import { EXPENSE_CATEGORIES } from '../lib/constants';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { ArrowDownUp, Archive, FileText, Search, X, Upload, Loader2, TrendingDown, TrendingUp, Plus, ArrowUp, ArrowDown, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ArrowDownUp, Archive, Search, X, Upload, Loader2, TrendingDown, TrendingUp, Plus, ArrowUp, ArrowDown, AlertTriangle, CheckCircle } from 'lucide-react';
 import clsx from 'clsx';
 import type {
   Transaction,
@@ -18,7 +16,7 @@ import type {
 
 type ViewTab = 'expenses' | 'income';
 
-export default function Transactions() {
+export default function Treasury() {
   const [searchParams] = useSearchParams();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -47,7 +45,7 @@ export default function Transactions() {
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState({ totalExpenses: 0, withoutInvoice: 0, unassigned: 0, pendingReview: 0 });
+  const [stats, setStats] = useState({ totalExpenses: 0, totalIncome: 0, withoutInvoice: 0, unassigned: 0, pendingReview: 0 });
   const [pageSize, setPageSize] = useState(50);
 
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -356,15 +354,39 @@ export default function Transactions() {
 
   const { totalExpenses, withoutInvoice, unassigned } = stats;
 
+  // Account summary values (from full dataset via API stats, not just current page)
+  const totalIncome = stats.totalIncome;
+  const totalExpenseAbs = stats.totalExpenses;
+  const balance = totalIncome - totalExpenseAbs;
+
   return (
-    <div className="min-h-screen bg-amber-50/30">
-      <Navbar />
-      <div className="p-6 max-w-7xl mx-auto">
-        {/* Header */}
+    <div className="min-h-screen bg-gray-50">
+      <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+        {/* Account Header */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Cuentas</h1>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Saldo</p>
+              <p className={`text-2xl font-bold ${balance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                {balance < 0 ? '-' : ''}{formatCurrency(Math.abs(balance))}€
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Entradas</p>
+              <p className="text-2xl font-bold text-green-600">+{formatCurrency(totalIncome)}€</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Salidas</p>
+              <p className="text-2xl font-bold text-red-600">-{formatCurrency(totalExpenseAbs)}€</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Header actions */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Transacciones</h1>
-            <p className="text-gray-500 text-sm mt-1">Gestiona y asigna las transacciones bancarias</p>
+            <p className="text-gray-500 text-sm">Gestiona y asigna las transacciones bancarias</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -414,35 +436,16 @@ export default function Transactions() {
           </button>
         </div>
 
-        {/* KPIs - solo para gastos */}
+        {/* Summary stats inline */}
         {activeTab === 'expenses' && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <KPICard
-              title="Total Gastos"
-              value={total}
-              subtitle={`Página ${currentPage + 1}`}
-              icon={ArrowDownUp}
-              color="amber"
-            />
-            <KPICard
-              title="Gastado Total"
-              value={`€${formatCurrency(totalExpenses)}`}
-              subtitle="Suma de gastos"
-              color={totalExpenses > 0 ? 'red' : 'green'}
-            />
-            <KPICard
-              title="Sin Factura"
-              value={withoutInvoice}
-              subtitle="Gastos sin factura"
-              icon={FileText}
-              color={withoutInvoice > 0 ? 'red' : 'green'}
-            />
-            <KPICard
-              title="Sin Proyecto"
-              value={unassigned}
-              subtitle="Gastos sin asignar"
-              color={unassigned > 0 ? 'amber' : 'green'}
-            />
+          <div className="flex items-center gap-6 text-sm text-gray-500 mb-6">
+            <span><strong className="text-gray-900">{total}</strong> transacciones</span>
+            <span className="text-gray-300">|</span>
+            <span><strong className="text-gray-900">€{formatCurrency(totalExpenses)}</strong> gastos</span>
+            <span className="text-gray-300">|</span>
+            <span><strong className={withoutInvoice > 0 ? 'text-red-600' : 'text-gray-900'}>{withoutInvoice}</strong> sin factura</span>
+            <span className="text-gray-300">|</span>
+            <span><strong className={unassigned > 0 ? 'text-amber-600' : 'text-gray-900'}>{unassigned}</strong> sin proyecto</span>
           </div>
         )}
 
@@ -690,7 +693,7 @@ export default function Transactions() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-amber-50/50 text-left">
+                  <tr className="bg-gray-50 text-left">
                     <th className="w-8"></th>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none" onClick={() => handleSort('date')}>
                       Fecha<SortIcon column="date" />
@@ -721,7 +724,7 @@ export default function Transactions() {
                         'transition-colors cursor-pointer',
                         t.needsReview
                           ? 'bg-amber-50/50 border-l-4 border-l-amber-400 hover:bg-amber-100/50'
-                          : 'hover:bg-amber-50/30'
+                          : 'hover:bg-gray-50'
                       )}
                     >
                       <td className="pl-2 pr-0 py-3">

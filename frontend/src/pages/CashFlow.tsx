@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Calendar, BarChart3, Table, Pencil, Trash2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 import { format, isBefore, isSameDay, startOfDay } from 'date-fns';
 import clsx from 'clsx';
-import Navbar from '../components/Navbar';
+
 import KPICard from '../components/KPICard';
 import CashFlowCalendar from '../components/CashFlowCalendar';
 import CashFlowChart from '../components/CashFlowChart';
@@ -176,7 +176,6 @@ export default function CashFlow() {
 
   return (
     <div className="min-h-screen bg-amber-50/30">
-      <Navbar />
       <div className="p-6 max-w-7xl mx-auto">
 
         {/* Header */}

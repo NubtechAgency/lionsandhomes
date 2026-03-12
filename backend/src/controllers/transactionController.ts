@@ -271,9 +271,12 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       expensesOnly.amount = { lt: 0 };
     }
 
-    const [total, totalExpensesAgg, withoutInvoiceCount, unassignedCount, pendingReviewCount] = await Promise.all([
+    const incomeOnly: any = { ...where, amount: { gt: 0 } };
+
+    const [total, totalExpensesAgg, totalIncomeAgg, withoutInvoiceCount, unassignedCount, pendingReviewCount] = await Promise.all([
       prisma.transaction.count({ where }),
       prisma.transaction.aggregate({ where: expensesOnly, _sum: { amount: true } }),
+      prisma.transaction.aggregate({ where: incomeOnly, _sum: { amount: true } }),
       prisma.transaction.count({ where: { ...expensesOnly, hasInvoice: false, expenseCategory: { notIn: [...INVOICE_EXEMPT_CATEGORIES] } } }),
       prisma.transaction.count({ where: { ...expensesOnly, allocations: { none: {} } } }),
       prisma.transaction.count({ where: { isArchived: false, needsReview: true } }),
@@ -289,6 +292,7 @@ export const listTransactions = async (req: Request, res: Response): Promise<voi
       },
       stats: {
         totalExpenses: Math.abs(totalExpensesAgg._sum.amount || 0),
+        totalIncome: totalIncomeAgg._sum.amount || 0,
         withoutInvoice: withoutInvoiceCount,
         unassigned: unassignedCount,
         pendingReview: pendingReviewCount,

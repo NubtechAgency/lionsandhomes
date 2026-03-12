@@ -175,6 +175,7 @@ export const getSyncStatus = async (_req: Request, res: Response): Promise<void>
  */
 export const telegramUploadInvoice = async (req: Request, res: Response): Promise<void> => {
   const file = req.file;
+  const ocrHints = req.body?.ocrHints as string | undefined;
   if (!file) {
     res.status(400).json({ error: 'Sin archivo', message: 'Se requiere un archivo (campo: file)' });
     return;
@@ -240,7 +241,7 @@ export const telegramUploadInvoice = async (req: Request, res: Response): Promis
     });
 
     try {
-      const ocr = await extractInvoiceData(file.buffer, file.mimetype, file.originalname);
+      const ocr = await extractInvoiceData(file.buffer, file.mimetype, file.originalname, ocrHints);
       const costCents = estimateCostCents(ocr.tokensInput, ocr.tokensOutput);
 
       await prisma.invoice.update({
@@ -332,7 +333,9 @@ export const telegramUploadInvoice = async (req: Request, res: Response): Promis
   res.status(200).json({
     message: autoAssigned
       ? 'Factura subida y vinculada automáticamente'
-      : 'Factura subida — pendiente de revisión manual',
+      : finalInvoice.ocrStatus === 'BUDGET_EXCEEDED'
+        ? 'Factura subida — sin OCR (presupuesto agotado)'
+        : 'Factura subida — pendiente de revisión manual',
     invoice: finalInvoice,
     autoAssigned,
     linkedTransactionId,

@@ -2,11 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { projectAPI, dashboardAPI } from '../services/api';
 import type { Project, ProjectStatus, DashboardStats } from '../types';
-import Navbar from '../components/Navbar';
-import KPICard from '../components/KPICard';
 import ProjectCard from '../components/ProjectCard';
 import { formatCurrency } from '../lib/formatters';
-import { FolderOpen, Plus, Wallet, TrendingDown, FileText } from 'lucide-react';
+import { GENERAL_PROJECT_NAME } from '../lib/constants';
+import { FolderOpen, Plus } from 'lucide-react';
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -30,7 +29,7 @@ export default function Projects() {
         projectAPI.listProjects(status),
         dashboardAPI.getStats(),
       ]);
-      setProjects(projectsRes.projects.filter(p => p.name !== 'General'));
+      setProjects(projectsRes.projects.filter(p => p.name !== GENERAL_PROJECT_NAME));
       setStats(statsRes);
     } catch (err) {
       setError('Error al cargar los proyectos');
@@ -55,16 +54,12 @@ export default function Projects() {
   ];
 
   return (
-    <div className="min-h-screen bg-amber-50/30">
-      <Navbar />
-      <div className="p-6 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <div className="p-6 lg:p-8 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Proyectos</h1>
-            <p className="text-gray-500 text-sm mt-1">
-              Gestiona los proyectos de remodelación
-            </p>
           </div>
           <button
             onClick={() => navigate('/projects/new')}
@@ -74,35 +69,20 @@ export default function Projects() {
           </button>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <KPICard
-            title="Proyectos Activos"
-            value={activeCount}
-            subtitle={`${projects.length} total`}
-            icon={FolderOpen}
-            color="amber"
-          />
-          <KPICard
-            title="Presupuesto Total"
-            value={`€${formatCurrency(totalBudget)}`}
-            subtitle="Suma de todos los proyectos"
-            icon={Wallet}
-            color="blue"
-          />
-          <KPICard
-            title="Gastado Este Mes"
-            value={stats ? `€${formatCurrency(stats.kpis.totalSpentThisMonth)}` : '—'}
-            icon={TrendingDown}
-            color={stats && stats.kpis.totalSpentThisMonth > 0 ? 'red' : 'green'}
-          />
-          <KPICard
-            title="Sin Factura"
-            value={stats?.kpis.totalWithoutInvoice ?? '—'}
-            subtitle="Transacciones pendientes"
-            icon={FileText}
-            color={stats && stats.kpis.totalWithoutInvoice > 0 ? 'red' : 'green'}
-          />
+        {/* Summary bar */}
+        <div className="flex items-center gap-6 text-sm text-gray-500 mb-6">
+          <span><strong className="text-gray-900">{activeCount}</strong> activos</span>
+          <span className="text-gray-300">|</span>
+          <span><strong className="text-gray-900">€{formatCurrency(totalBudget)}</strong> presupuestado</span>
+          {stats && (
+            <>
+              <span className="text-gray-300">|</span>
+              <span>
+                <strong className="text-gray-900">€{formatCurrency(stats.kpis.totalSpent)}</strong> gastado
+                {totalBudget > 0 && ` (${Math.round((stats.kpis.totalSpent / totalBudget) * 100)}%)`}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Filters */}
@@ -114,8 +94,8 @@ export default function Projects() {
                 onClick={() => setFilterStatus(f.key)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   filterStatus === f.key
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-amber-50'
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                 }`}
               >
                 {f.label}
