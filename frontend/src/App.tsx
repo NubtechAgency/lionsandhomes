@@ -57,7 +57,7 @@ function AppLayout() {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 lg:ml-[220px]">
+      <main className="flex-1 lg:ml-[220px] pt-14 lg:pt-0">
         <Routes>
           <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
 

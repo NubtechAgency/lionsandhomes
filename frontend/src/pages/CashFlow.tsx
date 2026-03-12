@@ -175,8 +175,8 @@ export default function CashFlow() {
   };
 
   return (
-    <div className="min-h-screen bg-amber-50/30">
-      <div className="p-6 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <div className="p-6 lg:p-8 max-w-7xl mx-auto">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -202,14 +202,14 @@ export default function CashFlow() {
             <select
               value={filters.projectId || ''}
               onChange={e => setFilters(prev => ({ ...prev, projectId: e.target.value ? parseInt(e.target.value) : undefined }))}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             >
               <option value="">Todos los proyectos</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
 
             <button onClick={() => setIsPlanModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors">
+              className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
               <Plus size={16} />
               Nueva entrada
             </button>
@@ -232,7 +232,7 @@ export default function CashFlow() {
             return (
               <button key={v.key} onClick={() => setActiveView(v.key)}
                 className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                  activeView === v.key ? 'bg-amber-100 text-amber-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50')}>
+                  activeView === v.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50')}>
                 <Icon size={15} />
                 {v.label}
               </button>
@@ -274,7 +274,7 @@ export default function CashFlow() {
 
                 {(filters.dateFrom || filters.dateTo || filters.type) && (
                   <button onClick={clearFilters}
-                    className="px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
+                    className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                     Limpiar filtros
                   </button>
                 )}
@@ -285,7 +285,7 @@ export default function CashFlow() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-amber-50/50">
+                  <tr className="bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Fecha</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tipo</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Descripción</th>
@@ -300,7 +300,7 @@ export default function CashFlow() {
                     <tr>
                       <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
                         <div className="flex items-center justify-center gap-2">
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-600" />
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600" />
                           Cargando...
                         </div>
                       </td>
@@ -315,7 +315,7 @@ export default function CashFlow() {
                     entries.map(entry => {
                       const realized = isRealized(entry);
                       return (
-                        <tr key={entry.id} className={clsx('hover:bg-amber-50/30 transition-colors', realized && 'opacity-60')}>
+                        <tr key={entry.id} className={clsx('hover:bg-gray-50 transition-colors', realized && 'opacity-60')}>
                           <td className="px-4 py-3 text-sm text-gray-700">{formatDate(entry.date)}</td>
                           <td className="px-4 py-3">
                             <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-xs font-medium',
@@ -331,14 +331,14 @@ export default function CashFlow() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-xs font-medium',
-                              realized ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-700')}>
+                              realized ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700')}>
                               {realized ? 'Realizada' : 'Pendiente'}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <button onClick={() => handleEntryClick(entry)}
-                                className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Editar">
+                                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar">
                                 <Pencil size={14} />
                               </button>
                               {deleteConfirmId === entry.id ? (
