@@ -3,8 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { transactionAPI, projectAPI, invoiceAPI } from '../services/api';
 import BulkUploadZone from '../components/BulkUploadZone';
 import OrphanInvoiceCard from '../components/OrphanInvoiceCard';
+import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { FileText, Search, ExternalLink, Upload, AlertTriangle, Loader2 } from 'lucide-react';
+import { FileText, Search, Eye, ExternalLink, Upload, AlertTriangle, Loader2 } from 'lucide-react';
 import type { Transaction, Project, OrphanInvoice, OcrBudgetStatus, OcrStatus } from '../types';
 
 export default function Invoices() {
@@ -28,6 +29,10 @@ export default function Invoices() {
   const [orphanLoading, setOrphanLoading] = useState(false);
   const [orphanSearch, setOrphanSearch] = useState('');
   const [orphanStatusFilter, setOrphanStatusFilter] = useState<OcrStatus | ''>('');
+
+  // Invoice preview
+  const [previewInvoice, setPreviewInvoice] = useState<{ url: string; fileName: string } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState<number | null>(null);
 
   // Load budget
   useEffect(() => {
@@ -83,6 +88,21 @@ export default function Invoices() {
     }
   }, [isScanner, loadOrphans]);
 
+  // Preview an invoice from the list (fetch signed URL first)
+  const handlePreviewInvoice = async (transactionId: number) => {
+    setLoadingPreview(transactionId);
+    try {
+      const res = await invoiceAPI.getInvoiceUrls(transactionId);
+      if (res.invoices.length > 0) {
+        setPreviewInvoice({ url: res.invoices[0].downloadUrl, fileName: res.invoices[0].fileName });
+      }
+    } catch (err) {
+      console.error('Error loading invoice preview:', err);
+    } finally {
+      setLoadingPreview(null);
+    }
+  };
+
   const totalAmount = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
   // Budget bar
@@ -93,7 +113,7 @@ export default function Invoices() {
     <div className="min-h-screen bg-gray-50">
       <div className="p-6 lg:p-8 max-w-7xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">
-          {isScanner ? 'Escáner' : 'Facturas de compra'}
+          {isScanner ? 'Escaner' : 'Facturas de compra'}
         </h1>
 
         {/* Scanner view: OCR Budget + Upload + Orphans */}
@@ -129,7 +149,7 @@ export default function Invoices() {
             <div className="mb-8">
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="flex items-center gap-2 mb-4">
-                  <Upload size={20} className="text-amber-600" />
+                  <Upload size={20} className="text-gray-600" />
                   <h2 className="text-lg font-medium text-gray-800">Subir facturas</h2>
                 </div>
                 <BulkUploadZone
@@ -159,25 +179,25 @@ export default function Invoices() {
                   placeholder="Buscar por nombre o proveedor..."
                   value={orphanSearch}
                   onChange={e => setOrphanSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-gray-400 focus:border-transparent"
                 />
               </div>
               <select
                 value={orphanStatusFilter}
                 onChange={e => setOrphanStatusFilter(e.target.value as OcrStatus | '')}
-                className="px-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-amber-500"
+                className="px-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-gray-400"
               >
-                <option value="">Todos los estados</option>
-                <option value="COMPLETED">OCR Completado</option>
-                <option value="FAILED">OCR Fallido</option>
-                <option value="BUDGET_EXCEEDED">Sin presupuesto</option>
-                <option value="PENDING">Pendiente</option>
+                <option value="">Todos</option>
+                <option value="COMPLETED">Listas para vincular</option>
+                <option value="FAILED">Con error</option>
+                <option value="BUDGET_EXCEEDED">Sin analizar</option>
+                <option value="PENDING">Procesando</option>
               </select>
             </div>
 
             {orphanLoading ? (
               <div className="flex justify-center py-12">
-                <Loader2 size={32} className="animate-spin text-amber-600" />
+                <Loader2 size={32} className="animate-spin text-gray-600" />
               </div>
             ) : orphans.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
@@ -208,7 +228,7 @@ export default function Invoices() {
             <div className="flex items-center gap-6 text-sm text-gray-500 mb-6">
               <span><strong className="text-gray-900">{transactions.length}</strong> facturas</span>
               <span className="text-gray-300">|</span>
-              <span><strong className="text-gray-900">€{formatCurrency(totalAmount)}</strong> total</span>
+              <span><strong className="text-gray-900">{formatCurrency(totalAmount)} &euro;</strong> total</span>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -219,13 +239,13 @@ export default function Invoices() {
                   placeholder="Buscar por empresa o concepto..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-gray-400 focus:border-transparent"
                 />
               </div>
               <select
                 value={filterProjectId || ''}
                 onChange={e => setFilterProjectId(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="px-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-amber-500"
+                className="px-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-gray-400"
               >
                 <option value="">Todos los proyectos</option>
                 {projects.map(p => (
@@ -236,7 +256,7 @@ export default function Invoices() {
 
             {isLoading ? (
               <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600" />
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600" />
               </div>
             ) : transactions.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
@@ -254,7 +274,7 @@ export default function Invoices() {
                       <th className="px-4 py-3 text-xs font-semibold text-gray-600">Archivo</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-600">Proyecto</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-right">Importe</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Accion</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-600 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -262,18 +282,35 @@ export default function Invoices() {
                       <tr key={t.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm text-gray-600">{formatDate(t.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate">{t.concept}</td>
-                        <td className="px-4 py-3 text-sm text-amber-600">{t.invoices?.map(i => i.fileName).join(', ') || '\u2014'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {t.invoices?.map(i => i.fileName).join(', ') || '\u2014'}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-600">{t.project?.name || '\u2014'}</td>
                         <td className="px-4 py-3 text-sm font-medium text-right text-red-600">
-                          {formatCurrency(Math.abs(t.amount))}
+                          {formatCurrency(Math.abs(t.amount))} &euro;
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => navigate(`/treasury?search=${encodeURIComponent(t.concept)}`)}
-                            className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium hover:underline"
-                          >
-                            <ExternalLink size={13} /> Ver transaccion
-                          </button>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handlePreviewInvoice(t.id)}
+                              disabled={loadingPreview === t.id}
+                              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Ver factura"
+                            >
+                              {loadingPreview === t.id ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <Eye size={14} />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => navigate(`/treasury?search=${encodeURIComponent(t.concept)}`)}
+                              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Ver transaccion"
+                            >
+                              <ExternalLink size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -284,6 +321,16 @@ export default function Invoices() {
           </>
         )}
       </div>
+
+      {/* Invoice Preview Modal */}
+      {previewInvoice && (
+        <InvoicePreviewModal
+          isOpen={!!previewInvoice}
+          onClose={() => setPreviewInvoice(null)}
+          url={previewInvoice.url}
+          fileName={previewInvoice.fileName}
+        />
+      )}
     </div>
   );
 }

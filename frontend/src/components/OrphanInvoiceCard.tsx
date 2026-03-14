@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Check, X, Edit3, Save, Search, FileText, ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, X, Edit3, Save, Search, FileText, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { invoiceAPI } from '../services/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { EXPENSE_CATEGORIES } from '../lib/constants';
 import TransactionSearchModal from './TransactionSearchModal';
+import InvoicePreviewModal from './InvoicePreviewModal';
+import MatchDetailModal from './MatchDetailModal';
 import type { OrphanInvoice, MatchSuggestion, OcrStatus } from '../types';
 
 interface OrphanInvoiceCardProps {
@@ -12,61 +13,22 @@ interface OrphanInvoiceCardProps {
   onDeleted: () => void;
 }
 
-// --- Score ring SVG (32x32) ---
-function ScoreRing({ score }: { score: number }) {
-  const r = 13;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (score / 100) * circ;
-  const color = score >= 80 ? '#16a34a' : score >= 50 ? '#d97706' : '#dc2626';
-  return (
-    <svg width={32} height={32} className="flex-shrink-0">
-      <circle cx={16} cy={16} r={r} fill="none" stroke="#e5e7eb" strokeWidth={3} />
-      <circle
-        cx={16} cy={16} r={r} fill="none" stroke={color} strokeWidth={3}
-        strokeDasharray={circ} strokeDashoffset={offset}
-        strokeLinecap="round" transform="rotate(-90 16 16)"
-      />
-      <text x={16} y={16} textAnchor="middle" dominantBaseline="central"
-        className="text-[10px] font-bold" fill={color}>{score}</text>
-    </svg>
-  );
-}
-
-// --- Match indicators (compare OCR vs transaction) ---
-type MatchIndicator = { icon: 'check' | 'tilde' | 'x'; color: string };
-
-function getAmountIndicator(ocrAmount: number | null, txAmount: number): MatchIndicator | null {
-  if (ocrAmount == null) return null;
-  const diff = Math.abs(ocrAmount - Math.abs(txAmount));
-  const pct = ocrAmount > 0 ? (diff / ocrAmount) * 100 : 100;
-  if (pct < 1) return { icon: 'check', color: 'text-green-500' };
-  if (pct < 10) return { icon: 'tilde', color: 'text-amber-500' };
-  return { icon: 'x', color: 'text-red-400' };
-}
-
-function getDateIndicator(ocrDate: string | null, txDate: string): MatchIndicator | null {
-  if (!ocrDate) return null;
-  const diff = Math.abs(new Date(ocrDate).getTime() - new Date(txDate).getTime());
-  const days = diff / (1000 * 60 * 60 * 24);
-  if (days <= 0.5) return { icon: 'check', color: 'text-green-500' };
-  if (days <= 3) return { icon: 'tilde', color: 'text-amber-500' };
-  return { icon: 'x', color: 'text-red-400' };
-}
-
-function IndicatorIcon({ ind }: { ind: MatchIndicator }) {
-  if (ind.icon === 'check') return <Check size={12} className={ind.color} />;
-  if (ind.icon === 'tilde') return <span className={`text-xs font-bold ${ind.color}`}>~</span>;
-  return <X size={12} className={ind.color} />;
-}
-
-const OCR_STATUS_BADGE: Record<OcrStatus, { label: string; color: string }> = {
-  NONE: { label: 'Sin OCR', color: 'bg-gray-100 text-gray-600' },
-  PENDING: { label: 'Pendiente', color: 'bg-blue-100 text-blue-700' },
+// Simplified status badge — only show user-facing states
+const OCR_STATUS_BADGE: Record<OcrStatus, { label: string; color: string } | null> = {
+  NONE: null,
+  PENDING: { label: 'Procesando', color: 'bg-blue-100 text-blue-700' },
   PROCESSING: { label: 'Procesando', color: 'bg-blue-100 text-blue-700' },
-  COMPLETED: { label: 'Completado', color: 'bg-green-100 text-green-700' },
-  FAILED: { label: 'Error', color: 'bg-red-100 text-red-700' },
-  BUDGET_EXCEEDED: { label: 'Sin presupuesto', color: 'bg-amber-100 text-amber-700' },
+  COMPLETED: { label: 'Listo', color: 'bg-green-100 text-green-700' },
+  FAILED: { label: 'Error OCR', color: 'bg-red-100 text-red-700' },
+  BUDGET_EXCEEDED: { label: 'Sin OCR', color: 'bg-gray-100 text-gray-600' },
 };
+
+// Score color helper
+function scoreColor(score: number): string {
+  if (score >= 80) return 'text-green-600 bg-green-50';
+  if (score >= 50) return 'text-amber-600 bg-amber-50';
+  return 'text-red-500 bg-red-50';
+}
 
 export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: OrphanInvoiceCardProps) {
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([]);
@@ -81,12 +43,8 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
   const [linking, setLinking] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null);
-
-  const getCategoryLabel = (key: string | null) => {
-    if (!key) return null;
-    return EXPENSE_CATEGORIES.find(c => c.key === key)?.label || key;
-  };
+  const [showPreview, setShowPreview] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<MatchSuggestion | null>(null);
 
   const loadSuggestions = async () => {
     if (invoice.ocrStatus !== 'COMPLETED') return;
@@ -108,7 +66,7 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
   const handleSaveOcr = async () => {
     setSaving(true);
     try {
-      const data: any = {};
+      const data: Record<string, unknown> = {};
       if (editData.ocrAmount !== undefined) data.ocrAmount = editData.ocrAmount;
       if (editData.ocrDate) data.ocrDate = editData.ocrDate;
       if (editData.ocrVendor) data.ocrVendor = editData.ocrVendor;
@@ -128,6 +86,7 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
     try {
       await invoiceAPI.linkToTransaction(invoice.id, transactionId);
       setShowSearchModal(false);
+      setSelectedMatch(null);
       onLinked();
     } catch (err) {
       console.error('Error linking invoice:', err);
@@ -149,24 +108,25 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
     }
   };
 
-  const badge = OCR_STATUS_BADGE[invoice.ocrStatus] || OCR_STATUS_BADGE.NONE;
-
+  const badge = OCR_STATUS_BADGE[invoice.ocrStatus];
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-      {/* Header */}
+      {/* Header: file info + actions */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <FileText size={18} className="text-amber-500 flex-shrink-0" />
+          <FileText size={18} className="text-gray-400 flex-shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-800 truncate">{invoice.fileName}</p>
             <p className="text-xs text-gray-400">{formatDate(invoice.createdAt)}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.color}`}>
-            {badge.label}
-          </span>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {badge && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.color}`}>
+              {badge.label}
+            </span>
+          )}
           {invoice.source && invoice.source !== 'web' && (
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
               invoice.source === 'telegram' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
@@ -174,27 +134,25 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
               {invoice.source === 'telegram' ? 'Telegram' : 'Bulk'}
             </span>
           )}
-          <a
-            href={invoice.downloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-400 hover:text-amber-600"
-            title="Ver archivo"
+          <button
+            onClick={() => setShowPreview(true)}
+            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+            title="Ver factura"
           >
-            <ExternalLink size={16} />
-          </a>
+            <Eye size={16} />
+          </button>
         </div>
       </div>
 
-      {/* OCR Data (view/edit) */}
+      {/* OCR Data (view/edit) — compact inline */}
       {invoice.ocrStatus === 'COMPLETED' && (
-        <div className="border border-gray-100 border-l-2 border-l-amber-400 rounded-lg p-3 space-y-2">
+        <div className="border border-gray-100 rounded-lg p-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase">Datos OCR</span>
             {!isEditing ? (
               <button
                 onClick={() => setIsEditing(true)}
-                className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
               >
                 <Edit3 size={12} /> Editar
               </button>
@@ -226,7 +184,7 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
                   step="0.01"
                   value={editData.ocrAmount ?? ''}
                   onChange={e => setEditData(d => ({ ...d, ocrAmount: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                  className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-amber-500"
+                  className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-gray-400"
                 />
               </div>
               <div>
@@ -235,7 +193,7 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
                   type="date"
                   value={editData.ocrDate}
                   onChange={e => setEditData(d => ({ ...d, ocrDate: e.target.value }))}
-                  className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-amber-500"
+                  className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-gray-400"
                 />
               </div>
               <div>
@@ -244,26 +202,21 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
                   type="text"
                   value={editData.ocrVendor}
                   onChange={e => setEditData(d => ({ ...d, ocrVendor: e.target.value }))}
-                  className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-amber-500"
+                  className="w-full mt-0.5 px-2 py-1 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-gray-400"
                 />
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
-              <div>
-                <span className="text-gray-400 text-xs">Importe:</span>{' '}
-                <span className="text-gray-800 font-medium">
-                  {invoice.ocrAmount != null ? `${formatCurrency(invoice.ocrAmount)}` : '—'}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-400 text-xs">Fecha:</span>{' '}
-                <span className="text-gray-800">{invoice.ocrDate ? formatDate(invoice.ocrDate) : '—'}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 text-xs">Proveedor:</span>{' '}
-                <span className="text-gray-800">{invoice.ocrVendor || '—'}</span>
-              </div>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-gray-800 font-medium">
+                {invoice.ocrAmount != null ? `${formatCurrency(invoice.ocrAmount)} \u20ac` : '\u2014'}
+              </span>
+              <span className="text-gray-500">
+                {invoice.ocrDate ? formatDate(invoice.ocrDate) : '\u2014'}
+              </span>
+              <span className="text-gray-500 truncate">
+                {invoice.ocrVendor || '\u2014'}
+              </span>
             </div>
           )}
         </div>
@@ -274,15 +227,20 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
         <p className="text-xs text-red-500 bg-red-50 rounded px-2 py-1">{invoice.ocrError}</p>
       )}
 
-      {/* Suggestions */}
+      {/* Suggestions — SIMPLIFIED: compact list, click for detail */}
       {invoice.ocrStatus === 'COMPLETED' && (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-500 uppercase">Coincidencias</span>
+            <span className="text-xs font-semibold text-gray-500 uppercase">
+              Coincidencias
+              {suggestions.length > 0 && (
+                <span className="ml-1.5 text-gray-400 font-normal normal-case">({suggestions.length})</span>
+              )}
+            </span>
             <button
               onClick={loadSuggestions}
               disabled={loadingSuggestions}
-              className="text-xs text-gray-400 hover:text-amber-600 flex items-center gap-1"
+              className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
             >
               <RefreshCw size={12} className={loadingSuggestions ? 'animate-spin' : ''} />
             </button>
@@ -290,126 +248,94 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
 
           {loadingSuggestions ? (
             <div className="flex items-center gap-2 py-2 text-xs text-gray-400">
-              <Loader2 size={14} className="animate-spin" /> Buscando coincidencias...
+              <Loader2 size={14} className="animate-spin" /> Buscando...
             </div>
           ) : suggestions.length > 0 ? (
-            suggestions.map(s => {
-              const tx = s.transaction;
-              const isExpanded = expandedSuggestion === s.transactionId;
-              const amtInd = getAmountIndicator(invoice.ocrAmount, tx.amount);
-              const dateInd = getDateIndicator(invoice.ocrDate, tx.date);
-              return (
-                <div key={s.transactionId} className="bg-gray-50 rounded-lg overflow-hidden">
-                  {/* Header: score + concept + actions */}
+            <div className="space-y-1">
+              {suggestions.map(s => {
+                const tx = s.transaction;
+                return (
                   <div
-                    className="flex items-start gap-2 p-3 pb-0 cursor-pointer"
-                    onClick={() => setExpandedSuggestion(isExpanded ? null : s.transactionId)}
+                    key={s.transactionId}
+                    className="flex items-center gap-2 px-2.5 py-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors group"
+                    onClick={() => setSelectedMatch(s)}
                   >
-                    <ScoreRing score={s.score} />
-                    <p className="text-sm font-medium text-gray-800 line-clamp-2 flex-1 pt-1">{tx.concept}</p>
-                    <div className="flex items-center gap-1 flex-shrink-0 pt-1">
-                      {isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleLink(s.transactionId); }}
-                        disabled={linking !== null}
-                        className="p-1 text-green-500 hover:text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
-                        title="Vincular"
-                      >
-                        {linking === s.transactionId ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Check size={16} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                    {/* Score badge */}
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${scoreColor(s.score)}`}>
+                      {s.score}
+                    </span>
 
-                  {/* Comparison grid: OCR vs Transaction */}
-                  <div className="grid grid-cols-2 gap-x-3 px-3 pb-3 pt-2">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-0.5">Factura (OCR)</p>
-                      <p className="text-sm font-medium text-gray-700">
-                        {invoice.ocrAmount != null ? `${formatCurrency(invoice.ocrAmount)} €` : '—'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {invoice.ocrDate ? formatDate(invoice.ocrDate) : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-0.5">Transaccion</p>
-                      <p className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                        {formatCurrency(Math.abs(tx.amount))} €
-                        {amtInd && <IndicatorIcon ind={amtInd} />}
-                      </p>
-                      <p className="text-xs text-gray-500 flex items-center gap-1">
-                        {formatDate(tx.date)}
-                        {dateInd && <IndicatorIcon ind={dateInd} />}
-                      </p>
-                      {tx.project && (
-                        <span className="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
-                          {tx.project.name}
-                        </span>
+                    {/* Amount */}
+                    <span className="text-sm font-medium text-gray-800 whitespace-nowrap">
+                      {formatCurrency(Math.abs(tx.amount))} \u20ac
+                    </span>
+
+                    {/* Concept — fills remaining space */}
+                    <span className="text-xs text-gray-500 truncate flex-1">
+                      {tx.concept}
+                    </span>
+
+                    {/* Quick link button */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleLink(s.transactionId); }}
+                      disabled={linking !== null}
+                      className="p-1 text-green-500 hover:text-green-700 hover:bg-green-50 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 flex-shrink-0"
+                      title="Vincular"
+                    >
+                      {linking === s.transactionId ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Check size={14} />
                       )}
-                    </div>
+                    </button>
                   </div>
-
-                  {/* Expanded details (supplementary info only) */}
-                  {isExpanded && (
-                    <div className="px-3 pb-3 pt-1 border-t border-gray-100 space-y-2">
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                        {tx.expenseCategory && (
-                          <div>
-                            <span className="text-gray-400">Categoria:</span>{' '}
-                            <span className="text-gray-700">{getCategoryLabel(tx.expenseCategory)}</span>
-                          </div>
-                        )}
-                        {tx.hasInvoice && (
-                          <span className="text-amber-600 font-medium">Ya tiene factura</span>
-                        )}
-                        {tx.notes && (
-                          <div className="w-full">
-                            <span className="text-gray-400">Notas:</span>{' '}
-                            <span className="text-gray-700">{tx.notes}</span>
-                          </div>
-                        )}
-                      </div>
-                      {/* Score breakdown with mini bars */}
-                      <div className="space-y-1 pt-1 border-t border-gray-100">
-                        {[
-                          { label: 'Importe', val: s.scoreBreakdown.amountScore, max: 40 },
-                          { label: 'Fecha', val: s.scoreBreakdown.dateScore, max: 30 },
-                          { label: 'Concepto', val: s.scoreBreakdown.conceptScore, max: 30 },
-                        ].map(b => (
-                          <div key={b.label} className="flex items-center gap-2 text-[11px]">
-                            <span className="text-gray-400 w-16">{b.label}</span>
-                            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${b.val / b.max >= 0.8 ? 'bg-green-400' : b.val / b.max >= 0.5 ? 'bg-amber-400' : 'bg-red-300'}`}
-                                style={{ width: `${(b.val / b.max) * 100}%` }}
-                              />
-                            </div>
-                            <span className="text-gray-500 w-8 text-right">{b.val}/{b.max}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           ) : (
-            <p className="text-xs text-gray-400 py-1">Sin coincidencias encontradas</p>
+            <p className="text-xs text-gray-400 py-1">Sin coincidencias</p>
           )}
         </div>
       )}
 
-      {/* Manual search button → opens modal */}
-      <button
-        onClick={() => setShowSearchModal(true)}
-        className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
-      >
-        <Search size={12} /> Buscar transaccion manualmente
-      </button>
+      {/* Actions row */}
+      <div className="flex items-center justify-between pt-1 border-t border-gray-50">
+        <button
+          onClick={() => setShowSearchModal(true)}
+          className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+        >
+          <Search size={12} /> Buscar manualmente
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1"
+        >
+          {deleting ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+          Eliminar
+        </button>
+      </div>
+
+      {/* Modals */}
+      {showPreview && (
+        <InvoicePreviewModal
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          url={invoice.downloadUrl}
+          fileName={invoice.fileName}
+        />
+      )}
+
+      {selectedMatch && (
+        <MatchDetailModal
+          isOpen={!!selectedMatch}
+          onClose={() => setSelectedMatch(null)}
+          suggestion={selectedMatch}
+          invoice={invoice}
+          onLink={handleLink}
+          linking={linking}
+        />
+      )}
 
       {showSearchModal && (
         <TransactionSearchModal
@@ -422,18 +348,6 @@ export default function OrphanInvoiceCard({ invoice, onLinked, onDeleted }: Orph
           initialDate={invoice.ocrDate?.split('T')[0] || undefined}
         />
       )}
-
-      {/* Delete button */}
-      <div className="pt-1 border-t border-gray-50">
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1"
-        >
-          {deleting ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
-          Eliminar factura
-        </button>
-      </div>
     </div>
   );
 }

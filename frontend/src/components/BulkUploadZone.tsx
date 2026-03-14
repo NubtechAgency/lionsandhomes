@@ -96,8 +96,8 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
         onClick={() => fileInputRef.current?.click()}
         className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
           isDragging
-            ? 'border-amber-500 bg-amber-50'
-            : 'border-gray-300 hover:border-amber-400 hover:bg-amber-50/30'
+            ? 'border-gray-500 bg-gray-50'
+            : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
         }`}
       >
         <Upload size={40} className="mx-auto text-gray-400 mb-3" />
@@ -130,7 +130,7 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
               onChange={(e) => setOcrHints(e.target.value.slice(0, MAX_HINTS_LENGTH))}
               placeholder={'Ej: "El total esta abajo a la derecha con IVA incluido", "Ignorar el deposito previo", "La fecha de compra esta arriba"...'}
               rows={3}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 resize-none"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 resize-none"
             />
             <p className="text-xs text-gray-400 text-right">{ocrHints.length}/{MAX_HINTS_LENGTH}</p>
           </div>
@@ -152,7 +152,7 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
           {selectedFiles.map((file, i) => (
             <div key={i} className="flex items-center justify-between bg-white border border-gray-100 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2 min-w-0">
-                <FileText size={16} className="text-amber-500 flex-shrink-0" />
+                <FileText size={16} className="text-gray-400 flex-shrink-0" />
                 <span className="text-sm text-gray-700 truncate">{file.name}</span>
                 <span className="text-xs text-gray-400 flex-shrink-0">({(file.size / 1024).toFixed(0)} KB)</span>
               </div>
@@ -164,7 +164,7 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
           <button
             onClick={handleUpload}
             disabled={isUploading}
-            className="w-full mt-2 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-400 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors"
+            className="w-full mt-2 py-2.5 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-400 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors"
           >
             {isUploading ? (
               <>
@@ -199,14 +199,14 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
                 r.status === 'COMPLETED'
                   ? 'bg-green-50 border-green-200'
                   : r.status === 'BUDGET_EXCEEDED'
-                  ? 'bg-amber-50 border-amber-200'
+                  ? 'bg-yellow-50 border-yellow-200'
                   : 'bg-red-50 border-red-200'
               }`}
             >
               {r.status === 'COMPLETED' ? (
                 <CheckCircle size={18} className="text-green-500 flex-shrink-0" />
               ) : (
-                <AlertTriangle size={18} className={r.status === 'BUDGET_EXCEEDED' ? 'text-amber-500 flex-shrink-0' : 'text-red-500 flex-shrink-0'} />
+                <AlertTriangle size={18} className={r.status === 'BUDGET_EXCEEDED' ? 'text-yellow-500 flex-shrink-0' : 'text-red-500 flex-shrink-0'} />
               )}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-gray-800 truncate">{r.fileName}</p>
@@ -220,7 +220,7 @@ export default function BulkUploadZone({ onUploadComplete, budget, onBudgetUpdat
                   </p>
                 )}
                 {r.status === 'BUDGET_EXCEEDED' && (
-                  <p className="text-xs text-amber-600">Archivo guardado, OCR pendiente (presupuesto agotado)</p>
+                  <p className="text-xs text-yellow-600">Archivo guardado, OCR pendiente (presupuesto agotado)</p>
                 )}
                 {r.status === 'FAILED' && (
                   <p className="text-xs text-red-600">{r.error || 'Error al procesar'}</p>

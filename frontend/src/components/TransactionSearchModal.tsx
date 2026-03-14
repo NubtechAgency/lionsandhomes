@@ -122,7 +122,7 @@ export default function TransactionSearchModal({
     >
       <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-amber-50 rounded-t-xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50 rounded-t-xl">
           <h2 className="text-lg font-bold text-gray-800">Buscar transaccion para vincular</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={20} />
@@ -139,14 +139,14 @@ export default function TransactionSearchModal({
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setCurrentPage(0); }}
                 placeholder="Buscar por concepto..."
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
                 autoFocus
               />
             </div>
             <select
               value={projectId ?? ''}
               onChange={(e) => { setProjectId(e.target.value ? parseInt(e.target.value) : undefined); setCurrentPage(0); }}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             >
               <option value="">Todos los proyectos</option>
               {projects.map(p => (
@@ -156,7 +156,7 @@ export default function TransactionSearchModal({
             <select
               value={category ?? ''}
               onChange={(e) => { setCategory((e.target.value || undefined) as ExpenseCategory | undefined); setCurrentPage(0); }}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             >
               <option value="">Todas las categorias</option>
               {EXPENSE_CATEGORIES.map(cat => (
@@ -170,14 +170,14 @@ export default function TransactionSearchModal({
               value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(0); }}
               placeholder="Desde"
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             />
             <input
               type="date"
               value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setCurrentPage(0); }}
               placeholder="Hasta"
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             />
             <input
               type="text"
@@ -185,13 +185,13 @@ export default function TransactionSearchModal({
               value={amountInput}
               onChange={(e) => { setAmountInput(e.target.value); setCurrentPage(0); }}
               placeholder="Importe aprox..."
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
             />
             <div className="flex gap-2">
               <select
                 value={sortBy}
                 onChange={(e) => { setSortBy(e.target.value); setCurrentPage(0); }}
-                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
               >
                 <option value="">Ordenar por...</option>
                 <option value="date-desc">Fecha: Reciente</option>
@@ -201,7 +201,7 @@ export default function TransactionSearchModal({
               </select>
               <button
                 onClick={clearFilters}
-                className="px-2 py-2 text-xs text-amber-600 hover:text-amber-700 whitespace-nowrap"
+                className="px-2 py-2 text-xs text-gray-500 hover:text-gray-700 whitespace-nowrap"
                 title="Limpiar filtros"
               >
                 <X size={16} />
@@ -231,7 +231,7 @@ export default function TransactionSearchModal({
               </thead>
               <tbody>
                 {transactions.map((t) => (
-                  <tr key={t.id} className="border-b border-gray-50 hover:bg-amber-50/30">
+                  <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="py-2 pr-2 text-gray-500 whitespace-nowrap">{formatDate(t.date)}</td>
                     <td className="py-2 pr-2 text-gray-800 max-w-[240px] truncate">{t.concept}</td>
                     <td className="py-2 pr-2 text-right font-medium text-gray-800 whitespace-nowrap">
@@ -269,7 +269,7 @@ export default function TransactionSearchModal({
               <button
                 onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
                 disabled={currentPage === 0}
-                className="p-1 hover:text-amber-600 disabled:opacity-30"
+                className="p-1 hover:text-gray-600 disabled:opacity-30"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -277,7 +277,7 @@ export default function TransactionSearchModal({
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
                 disabled={currentPage >= totalPages - 1}
-                className="p-1 hover:text-amber-600 disabled:opacity-30"
+                className="p-1 hover:text-gray-600 disabled:opacity-30"
               >
                 <ChevronRight size={18} />
               </button>
